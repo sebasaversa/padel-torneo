@@ -195,6 +195,16 @@
             color: var(--muted);
             font-size: 0.76rem;
         }
+        .identity-status {
+            display: inline-block;
+            margin: 0 0 8px;
+            padding: 7px 10px;
+            border-radius: 8px;
+            background: var(--primary-light);
+            color: #047857;
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
         .players-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -405,6 +415,7 @@
         </div>
         <div id="sync-status" style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;" aria-live="polite">Guardado en este dispositivo</div>
         <div id="presence-status" style="font-size:0.82rem;color:var(--muted);margin-bottom:8px;" aria-live="polite" hidden></div>
+        <div id="identity-status" class="identity-status" hidden aria-live="polite"></div>
         <div id="progress-text" style="font-size:0.85rem;color:var(--muted);"></div>
         <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
     </div>
@@ -520,7 +531,7 @@
             <p id="identity-confirm-description"></p>
             <div class="modal-actions">
                 <button class="btn btn-secondary" type="button" onclick="showIdentityChoice()">Elegir otro</button>
-                <button class="btn btn-primary" type="button" onclick="confirmIdentitySelection()">Sí, soy yo</button>
+                <button class="btn btn-primary" id="identity-confirm-button" type="button" onclick="confirmIdentitySelection()">Sí, soy yo</button>
             </div>
         </div>
     </div>
@@ -934,6 +945,19 @@
         return `${getActorName()} · ${getDeviceLabel()}`;
     }
 
+    function updateIdentityStatus() {
+        const status = document.getElementById('identity-status');
+        if (!status) return;
+        if (!tournamentId) {
+            status.hidden = true;
+            return;
+        }
+        status.hidden = false;
+        status.textContent = Number.isInteger(actorPlayerId) && players[actorPlayerId]
+            ? `👤 Sos: ${players[actorPlayerId]}`
+            : '👤 Estás como espectador';
+    }
+
     function getActorStorageKey() {
         return tournamentId ? `padel-torneo-actor-${tournamentId}` : '';
     }
@@ -971,6 +995,8 @@
         const available = getAvailablePlayerIds();
         const continueButton = document.getElementById('identity-continue-button');
         const spectatorButton = document.getElementById('spectator-button');
+        pendingActorPlayerId = null;
+        document.getElementById('identity-confirm-button').disabled = false;
         document.getElementById('identity-choice-step').hidden = false;
         document.getElementById('identity-confirm-step').hidden = true;
         select.innerHTML = available.map(id => `<option value="${id}">${escapeHTML(players[id])}</option>`).join('');
@@ -980,6 +1006,11 @@
             ? 'Elegí tu jugador para identificar tus cambios. Los jugadores ya elegidos por otros dispositivos no aparecen.'
             : 'Todos los jugadores ya están identificados desde otros dispositivos.';
         modal.hidden = false;
+    }
+
+    function refreshIdentityChoiceIfNeeded() {
+        const modal = document.getElementById('identity-modal');
+        if (!modal.hidden && !document.getElementById('identity-choice-step').hidden) showIdentityChoice();
     }
 
     function continueIdentitySelection() {
@@ -994,15 +1025,28 @@
 
     async function confirmIdentitySelection() {
         if (!Number.isInteger(pendingActorPlayerId)) return;
-        const claimed = await claimPlayer(pendingActorPlayerId);
-        if (!claimed) {
+        const confirmButton = document.getElementById('identity-confirm-button');
+        confirmButton.disabled = true;
+        try {
+            const claimed = await claimPlayer(pendingActorPlayerId);
+            if (!claimed) {
+                pendingActorPlayerId = null;
+                showToast('Ese jugador acaba de ser elegido desde otro dispositivo. Elegí otro.');
+                showIdentityChoice();
+                return;
+            }
+            document.getElementById('identity-modal').hidden = true;
+            updateIdentityStatus();
+            logActivity(`${getActorName()} se identificó en el torneo`);
+        } catch (error) {
+            console.error(error);
             pendingActorPlayerId = null;
-            showToast('Ese jugador acaba de ser elegido desde otro dispositivo. Elegí otro.');
+            setSyncStatus('No se pudo guardar tu identificación');
+            showToast('No se pudo confirmar. Revisá la conexión e intentá de nuevo.');
             showIdentityChoice();
-            return;
+        } finally {
+            confirmButton.disabled = false;
         }
-        document.getElementById('identity-modal').hidden = true;
-        logActivity(`${getActorName()} se identificó en el torneo`);
     }
 
     function enterAsSpectator() {
@@ -1010,6 +1054,7 @@
         saveActorPlayerId(null);
         document.getElementById('identity-modal').hidden = true;
         if (presenceRef) presenceRef.update({ actorName: 'Espectador', device: getDeviceLabel() });
+        updateIdentityStatus();
     }
 
     async function claimPlayer(playerId) {
@@ -1027,6 +1072,7 @@
         await actorClaimRef.onDisconnect().remove();
         actorPlayerId = playerId;
         saveActorPlayerId(playerId);
+        updateIdentityStatus();
         if (presenceRef) await presenceRef.update({ actorPlayerId: playerId, actorName: getActorName(), device: getDeviceLabel() });
         return true;
     }
@@ -1041,6 +1087,7 @@
             saveActorPlayerId(actorPlayerId);
             if (presenceRef) presenceRef.update({ actorPlayerId, actorName: getActorName(), device: getDeviceLabel() });
             identityPromptShown = true;
+            updateIdentityStatus();
             return;
         }
         const savedPlayerId = loadActorPlayerId();
@@ -1125,6 +1172,7 @@
             identityPromptShown = false;
             claimsLoaded = false;
             sharedStateLoaded = false;
+            updateIdentityStatus();
             tournamentRef = realtimeDb.ref(`tournaments/${id}`);
             setSyncStatus('Conectando al torneo compartido…');
             const stateRef = tournamentRef.child('state');
@@ -1152,6 +1200,7 @@
             const claimsListener = claimsRef.on('value', snapshot => {
                 claimedPlayers = snapshot.val() || {};
                 claimsLoaded = true;
+                refreshIdentityChoiceIfNeeded();
                 maybeRequestIdentity();
             });
             claimsUnsubscribe = () => claimsRef.off('value', claimsListener);
@@ -1389,6 +1438,7 @@
                 players[idx] = e.target.value.trim() || `Jugador ${idx + 1}`;
                 saveLocal();
                 logActivity(`cambió el nombre de ${p} a ${players[idx]}`);
+                updateIdentityStatus();
                 renderRounds();
                 calculateStats();
             });
@@ -1810,6 +1860,7 @@
 
     function renderAll() {
         updateTournamentHeader();
+        updateIdentityStatus();
         updateUndoButton();
         updateSubtitle();
         renderPlayers();
