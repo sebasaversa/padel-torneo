@@ -646,6 +646,12 @@
 
     async function createSharedTournament(copyLink = false) {
         if (!tournamentId) {
+            // Un torneo nuevo conserva la configuración, pero siempre empieza sin resultados.
+            generateSchedule();
+            collapsedRounds = {};
+            saveLocal();
+            renderAll();
+
             const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
             history.replaceState(null, '', `${location.pathname}?torneo=${id}`);
             await connectToTournament(id);
