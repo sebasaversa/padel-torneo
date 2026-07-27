@@ -15,6 +15,8 @@
             --border: #d1d5db;
             --danger: #ef4444;
             --warning: #f59e0b;
+            --team-one-bg: #d1fae5;
+            --team-two-bg: #dbeafe;
         }
         * { box-sizing: border-box; }
         body {
@@ -129,6 +131,12 @@
         th, td { padding: 8px 4px; border-bottom: 1px solid var(--border); }
         th { background: var(--primary); color: white; position: sticky; top: 0; }
         .leader-row-1 { background: var(--primary-light); font-weight: bold; }
+        .table-legend {
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-size: 0.78rem;
+            line-height: 1.45;
+        }
         .round-card {
             border-top: 4px solid var(--primary);
             margin-bottom: 12px;
@@ -163,7 +171,11 @@
             gap: 6px;
             margin-bottom: 6px;
             flex-wrap: wrap;
+            padding: 6px;
+            border-radius: 8px;
         }
+        .team-one { background: var(--team-one-bg); }
+        .team-two { background: var(--team-two-bg); }
         .team-pair { display: flex; gap: 6px; flex: 1; min-width: 0; }
         .team select {
             flex: 1;
@@ -192,6 +204,8 @@
             display: flex;
             align-items: center;
             gap: 4px;
+            padding: 4px;
+            border-radius: 8px;
         }
         .score-adjust {
             width: 38px;
@@ -330,6 +344,7 @@
                 <tbody id="leaderboard-body"></tbody>
             </table>
         </div>
+        <p class="table-legend"><strong>Referencia:</strong> V: victorias · D: derrotas · GF: games a favor · GC: games en contra · Dif: diferencia de games (GF − GC).</p>
     </div>
 
     <div class="card">
@@ -886,21 +901,21 @@
                 html += `
                 <div class="match ${mDone ? 'match-done' : ''}">
                     <div class="court-title">📍 Cancha ${m.court}</div>
-                    <div class="team">
+                    <div class="team team-one">
                         <div class="team-pair">
                             ${buildSelect(m.t1_p1, rIdx, mIdx, 't1_p1')}
                             ${buildSelect(m.t1_p2, rIdx, mIdx, 't1_p2')}
                         </div>
                     </div>
                     <div class="vs">CONTRA</div>
-                    <div class="team">
+                    <div class="team team-two">
                         <div class="team-pair">
                             ${buildSelect(m.t2_p1, rIdx, mIdx, 't2_p1')}
                             ${buildSelect(m.t2_p2, rIdx, mIdx, 't2_p2')}
                         </div>
                     </div>
                     <div class="score-row">
-                        <div class="score-control">
+                        <div class="score-control team-one">
                             <button type="button" class="score-adjust" aria-label="Bajar puntaje del primer equipo en cancha ${m.court}"
                                     onclick="adjustScore(${rIdx}, ${mIdx}, 'score1', -1)">−</button>
                             <input type="number" min="0" max="${gamesPerSet}" class="score-input" placeholder="0"
@@ -910,7 +925,7 @@
                                     onclick="adjustScore(${rIdx}, ${mIdx}, 'score1', 1)">+</button>
                         </div>
                         <span class="score-sep">—</span>
-                        <div class="score-control">
+                        <div class="score-control team-two">
                             <button type="button" class="score-adjust" aria-label="Bajar puntaje del segundo equipo en cancha ${m.court}"
                                     onclick="adjustScore(${rIdx}, ${mIdx}, 'score2', -1)">−</button>
                             <input type="number" min="0" max="${gamesPerSet}" class="score-input" placeholder="0"
