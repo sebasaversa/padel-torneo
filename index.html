@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Anotador de torneo americano de pádel — 9 jugadores, 2 canchas, rotación automática">
+    <title>Torneo Americano Pádel</title>
+    <style>
+        :root {
+            --primary: #059669;
+            --primary-light: #d1fae5;
+            --dark: #1f2937;
+            --muted: #6b7280;
+            --light: #f3f4f6;
+            --border: #d1d5db;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #ecfdf5 0%, var(--light) 50%, #eff6ff 100%);
+            color: var(--dark);
+            margin: 0;
+            padding: 12px;
+            min-height: 100vh;
+        }
+        .container { max-width: 820px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            color: var(--dark);
+            font-size: 1.5rem;
+            margin: 0 0 4px;
+        }
+        .subtitle {
+            text-align: center;
+            color: var(--muted);
+            font-size: 0.9rem;
+            margin: 0 0 20px;
+        }
+        h2 {
+            font-size: 1.1rem;
+            margin: 0 0 12px;
+            color: var(--dark);
+        }
+        h3 { margin: 0 0 10px; font-size: 1rem; }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.15s;
+        }
+        .btn:hover { opacity: 0.85; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-secondary { background: white; color: var(--dark); border: 1px solid var(--border); }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-sm { padding: 5px 10px; font-size: 0.8rem; }
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(80px);
+            background: var(--dark);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            z-index: 100;
+            opacity: 0;
+            transition: transform 0.3s, opacity 0.3s;
+            pointer-events: none;
+        }
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+        .players-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 8px;
+        }
+        .players-grid input {
+            padding: 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            width: 100%;
+            font-size: 0.95rem;
+        }
+        table { width: 100%; border-collapse: collapse; text-align: center; font-size: 0.9rem; }
+        th, td { padding: 8px 4px; border-bottom: 1px solid var(--border); }
+        th { background: var(--primary); color: white; position: sticky; top: 0; }
+        .leader-row-1 { background: var(--primary-light); font-weight: bold; }
+        .round-card {
+            border-top: 4px solid var(--primary);
+            margin-bottom: 12px;
+        }
+        .round-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+        }
+        .round-header .chevron { color: var(--muted); font-size: 0.85rem; }
+        .round-body { margin-top: 10px; }
+        .round-body.collapsed { display: none; }
+        .round-done .round-header h3::after {
+            content: ' ✓';
+            color: var(--primary);
+        }
+        .match {
+            background: var(--light);
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+        .match-done { border-left: 4px solid var(--primary); }
+        .court-title { font-weight: bold; margin-bottom: 8px; color: var(--primary); font-size: 0.9rem; }
+        .team {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            margin-bottom: 6px;
+            flex-wrap: wrap;
+        }
+        .team-pair { display: flex; gap: 6px; flex: 1; min-width: 0; }
+        .team select {
+            flex: 1;
+            padding: 8px 4px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            font-size: 0.85rem;
+            min-width: 0;
+        }
+        .vs {
+            font-weight: bold;
+            font-size: 11px;
+            color: var(--muted);
+            text-align: center;
+            margin: 4px 0;
+            letter-spacing: 1px;
+        }
+        .score-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .score-input {
+            width: 56px;
+            padding: 10px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            border: 2px solid var(--primary);
+            border-radius: 8px;
+        }
+        .score-sep { font-weight: bold; color: var(--muted); }
+        .rest-badge {
+            background: #fef3c7;
+            color: #92400e;
+            padding: 6px 10px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            display: inline-block;
+            margin-bottom: 8px;
+        }
+        .info-box {
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            color: #1e40af;
+            margin-bottom: 12px;
+            line-height: 1.5;
+        }
+        .progress-bar {
+            height: 6px;
+            background: var(--border);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: var(--primary);
+            transition: width 0.3s;
+        }
+        @media (max-width: 480px) {
+            h1 { font-size: 1.25rem; }
+            .team-pair { flex-direction: column; }
+            .team select { max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🏆 Torneo Americano Pádel</h1>
+    <p class="subtitle">9 jugadores · 2 canchas · Sets a 4 games · Rotación automática</p>
+
+    <div class="info-box">
+        💡 <strong>Cómo usar entre todos:</strong> Una persona anota en su celular. Después de cada ronda, tocá <em>Compartir link</em> y mandalo al grupo — al abrirlo, todos ven los mismos resultados.
+    </div>
+
+    <div class="card">
+        <div class="toolbar">
+            <button class="btn btn-primary" onclick="shareState()">🔗 Compartir link</button>
+            <button class="btn btn-secondary" onclick="exportJSON()">📥 Exportar</button>
+            <button class="btn btn-secondary" onclick="importJSON()">📤 Importar</button>
+            <button class="btn btn-secondary btn-sm" onclick="resetSchedule()">🔄 Regenerar fixture</button>
+            <button class="btn btn-danger btn-sm" onclick="resetAll()">🗑️ Borrar todo</button>
+        </div>
+        <div id="progress-text" style="font-size:0.85rem;color:var(--muted);"></div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    </div>
+
+    <div class="card">
+        <h2>1. Jugadores</h2>
+        <div class="players-grid" id="players-container"></div>
+    </div>
+
+    <div class="card">
+        <h2>2. Tabla General</h2>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Jugador</th>
+                        <th>V</th>
+                        <th>D</th>
+                        <th>GF</th>
+                        <th>GC</th>
+                        <th>Dif</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>3. Partidos (a 4 games)</h2>
+        <div id="rounds-container"></div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<input type="file" id="file-input" accept=".json" style="display:none">
+
+<script>
+    const NUM_PLAYERS = 9;
+    const NUM_ROUNDS = 9;
+
+    let players = Array.from({ length: NUM_PLAYERS }, (_, i) => `Jugador ${i + 1}`);
+    let schedule = [];
+    let collapsedRounds = {};
+
+    function generateSchedule() {
+        schedule = [];
+        for (let i = 0; i < NUM_ROUNDS; i++) {
+            schedule.push({
+                id: i,
+                matches: [
+                    {
+                        court: 1,
+                        t1_p1: (0 + i) % NUM_PLAYERS,
+                        t1_p2: (7 + i) % NUM_PLAYERS,
+                        t2_p1: (3 + i) % NUM_PLAYERS,
+                        t2_p2: (4 + i) % NUM_PLAYERS,
+                        score1: '',
+                        score2: ''
+                    },
+                    {
+                        court: 2,
+                        t1_p1: (1 + i) % NUM_PLAYERS,
+                        t1_p2: (6 + i) % NUM_PLAYERS,
+                        t2_p1: (2 + i) % NUM_PLAYERS,
+                        t2_p2: (5 + i) % NUM_PLAYERS,
+                        score1: '',
+                        score2: ''
+                    }
+                ]
+            });
+        }
+    }
+
+    function getState() {
+        return { players, schedule, collapsedRounds };
+    }
+
+    function setState(state) {
+        if (state.players) players = state.players;
+        if (state.schedule) schedule = state.schedule;
+        if (state.collapsedRounds) collapsedRounds = state.collapsedRounds;
+        renderAll();
+    }
+
+    function saveLocal() {
+        try {
+            localStorage.setItem('padel-torneo', JSON.stringify(getState()));
+        } catch (e) { /* quota exceeded */ }
+    }
+
+    function loadLocal() {
+        try {
+            const raw = localStorage.getItem('padel-torneo');
+            if (raw) return JSON.parse(raw);
+        } catch (e) { /* corrupt */ }
+        return null;
+    }
+
+    function encodeState(state) {
+        return btoa(unescape(encodeURIComponent(JSON.stringify(state))));
+    }
+
+    function decodeState(encoded) {
+        return JSON.parse(decodeURIComponent(escape(atob(encoded))));
+    }
+
+    function loadFromHash() {
+        const hash = location.hash.slice(1);
+        if (!hash.startsWith('s=')) return false;
+        try {
+            setState(decodeState(hash.slice(2)));
+            saveLocal();
+            return true;
+        } catch (e) {
+            showToast('Link inválido');
+            return false;
+        }
+    }
+
+    function shareState() {
+        const encoded = encodeState(getState());
+        const url = location.origin + location.pathname + '#s=' + encoded;
+        navigator.clipboard.writeText(url).then(() => {
+            showToast('¡Link copiado! Mandalo al grupo.');
+        }).catch(() => {
+            prompt('Copiá este link:', url);
+        });
+        history.replaceState(null, '', '#s=' + encoded);
+    }
+
+    function exportJSON() {
+        const blob = new Blob([JSON.stringify(getState(), null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'torneo-padel.json';
+        a.click();
+        showToast('Archivo descargado');
+    }
+
+    function importJSON() {
+        document.getElementById('file-input').click();
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                setState(JSON.parse(ev.target.result));
+                saveLocal();
+                showToast('Datos importados');
+            } catch (err) {
+                showToast('Archivo inválido');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    });
+
+    function resetSchedule() {
+        if (!confirm('¿Regenerar el fixture? Se pierden los resultados pero se mantienen los nombres.')) return;
+        const savedPlayers = [...players];
+        generateSchedule();
+        players = savedPlayers;
+        collapsedRounds = {};
+        saveLocal();
+        renderAll();
+        showToast('Fixture regenerado');
+    }
+
+    function resetAll() {
+        if (!confirm('¿Borrar todo (nombres y resultados)?')) return;
+        players = Array.from({ length: NUM_PLAYERS }, (_, i) => `Jugador ${i + 1}`);
+        generateSchedule();
+        collapsedRounds = {};
+        localStorage.removeItem('padel-torneo');
+        history.replaceState(null, '', location.pathname);
+        renderAll();
+        showToast('Todo reiniciado');
+    }
+
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    function renderPlayers() {
+        const container = document.getElementById('players-container');
+        container.innerHTML = '';
+        players.forEach((p, idx) => {
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = p;
+            input.placeholder = `Jugador ${idx + 1}`;
+            input.addEventListener('change', (e) => {
+                players[idx] = e.target.value.trim() || `Jugador ${idx + 1}`;
+                saveLocal();
+                renderRounds();
+                calculateStats();
+            });
+            container.appendChild(input);
+        });
+    }
+
+    function buildSelect(playerIndex, roundIdx, matchIdx, role) {
+        let html = `<select onchange="updateMatchPlayer(${roundIdx}, ${matchIdx}, '${role}', this.value)">`;
+        players.forEach((p, idx) => {
+            html += `<option value="${idx}" ${idx === playerIndex ? 'selected' : ''}>${p}</option>`;
+        });
+        html += '</select>';
+        return html;
+    }
+
+    function updateMatchPlayer(roundIdx, matchIdx, role, newValue) {
+        schedule[roundIdx].matches[matchIdx][role] = parseInt(newValue);
+        saveLocal();
+        renderRounds();
+        calculateStats();
+    }
+
+    function updateScore(roundIdx, matchIdx, team, value) {
+        schedule[roundIdx].matches[matchIdx][team] = value;
+        saveLocal();
+        calculateStats();
+        updateProgress();
+        renderRounds();
+    }
+
+    function getRestingPlayer(round) {
+        const playing = new Set();
+        round.matches.forEach(m => {
+            playing.add(m.t1_p1); playing.add(m.t1_p2);
+            playing.add(m.t2_p1); playing.add(m.t2_p2);
+        });
+        for (let i = 0; i < NUM_PLAYERS; i++) {
+            if (!playing.has(i)) return players[i];
+        }
+        return '—';
+    }
+
+    function isMatchDone(m) {
+        return m.score1 !== '' && m.score2 !== '';
+    }
+
+    function isRoundDone(round) {
+        return round.matches.every(isMatchDone);
+    }
+
+    function toggleRound(rIdx) {
+        collapsedRounds[rIdx] = !collapsedRounds[rIdx];
+        saveLocal();
+        renderRounds();
+    }
+
+    function renderRounds() {
+        const container = document.getElementById('rounds-container');
+        container.innerHTML = '';
+
+        schedule.forEach((round, rIdx) => {
+            const done = isRoundDone(round);
+            const collapsed = collapsedRounds[rIdx] === true;
+            const rest = getRestingPlayer(round);
+
+            let html = `<div class="card round-card ${done ? 'round-done' : ''}">
+                <div class="round-header" onclick="toggleRound(${rIdx})">
+                    <h3>Ronda ${rIdx + 1}${done ? '' : ''}</h3>
+                    <span class="chevron">${collapsed ? '▶ Mostrar' : '▼ Ocultar'}</span>
+                </div>
+                <div class="round-body ${collapsed ? 'collapsed' : ''}">
+                    <div class="rest-badge">💤 Descansa: ${rest}</div>`;
+
+            round.matches.forEach((m, mIdx) => {
+                const mDone = isMatchDone(m);
+                html += `
+                <div class="match ${mDone ? 'match-done' : ''}">
+                    <div class="court-title">📍 Cancha ${m.court}</div>
+                    <div class="team">
+                        <div class="team-pair">
+                            ${buildSelect(m.t1_p1, rIdx, mIdx, 't1_p1')}
+                            ${buildSelect(m.t1_p2, rIdx, mIdx, 't1_p2')}
+                        </div>
+                    </div>
+                    <div class="vs">CONTRA</div>
+                    <div class="team">
+                        <div class="team-pair">
+                            ${buildSelect(m.t2_p1, rIdx, mIdx, 't2_p1')}
+                            ${buildSelect(m.t2_p2, rIdx, mIdx, 't2_p2')}
+                        </div>
+                    </div>
+                    <div class="score-row">
+                        <input type="number" min="0" max="4" class="score-input" placeholder="0"
+                               value="${m.score1}" inputmode="numeric"
+                               oninput="updateScore(${rIdx}, ${mIdx}, 'score1', this.value)">
+                        <span class="score-sep">—</span>
+                        <input type="number" min="0" max="4" class="score-input" placeholder="0"
+                               value="${m.score2}" inputmode="numeric"
+                               oninput="updateScore(${rIdx}, ${mIdx}, 'score2', this.value)">
+                    </div>
+                </div>`;
+            });
+
+            html += '</div></div>';
+            container.innerHTML += html;
+        });
+    }
+
+    function calculateStats() {
+        const stats = players.map((name, id) => ({
+            id, name, v: 0, d: 0, gf: 0, gc: 0, dif: 0
+        }));
+
+        schedule.forEach(round => {
+            round.matches.forEach(m => {
+                if (!isMatchDone(m)) return;
+                const s1 = parseInt(m.score1, 10);
+                const s2 = parseInt(m.score2, 10);
+                const t1 = [m.t1_p1, m.t1_p2];
+                const t2 = [m.t2_p1, m.t2_p2];
+
+                t1.forEach(p => {
+                    stats[p].gf += s1;
+                    stats[p].gc += s2;
+                    if (s1 > s2) stats[p].v += 1;
+                    if (s1 < s2) stats[p].d += 1;
+                });
+                t2.forEach(p => {
+                    stats[p].gf += s2;
+                    stats[p].gc += s1;
+                    if (s2 > s1) stats[p].v += 1;
+                    if (s2 < s1) stats[p].d += 1;
+                });
+            });
+        });
+
+        stats.forEach(s => { s.dif = s.gf - s.gc; });
+        stats.sort((a, b) => {
+            if (b.v !== a.v) return b.v - a.v;
+            if (b.dif !== a.dif) return b.dif - a.dif;
+            return b.gf - a.gf;
+        });
+
+        const tbody = document.getElementById('leaderboard-body');
+        tbody.innerHTML = stats.map((s, idx) => `
+            <tr class="${idx === 0 ? 'leader-row-1' : ''}">
+                <td>${idx + 1}</td>
+                <td>${s.name}</td>
+                <td>${s.v}</td>
+                <td>${s.d}</td>
+                <td>${s.gf}</td>
+                <td>${s.gc}</td>
+                <td>${s.dif > 0 ? '+' + s.dif : s.dif}</td>
+            </tr>
+        `).join('');
+    }
+
+    function updateProgress() {
+        const total = schedule.reduce((acc, r) => acc + r.matches.length, 0);
+        let done = 0;
+        schedule.forEach(r => r.matches.forEach(m => { if (isMatchDone(m)) done++; }));
+        const pct = total ? Math.round((done / total) * 100) : 0;
+        document.getElementById('progress-fill').style.width = pct + '%';
+        document.getElementById('progress-text').textContent =
+            `${done} de ${total} partidos anotados (${pct}%)`;
+    }
+
+    function renderAll() {
+        renderPlayers();
+        renderRounds();
+        calculateStats();
+        updateProgress();
+    }
+
+    // Init
+    generateSchedule();
+    if (!loadFromHash()) {
+        const saved = loadLocal();
+        if (saved) setState(saved);
+        else renderAll();
+    }
+
+    window.addEventListener('hashchange', () => loadFromHash());
+</script>
+</body>
+</html>
