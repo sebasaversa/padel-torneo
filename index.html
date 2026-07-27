@@ -244,17 +244,19 @@
     <p class="subtitle" id="subtitle">9 jugadores · 2 canchas · Sets a 4 games · Rotación automática</p>
 
     <div class="info-box">
-        💡 <strong>Cómo usar entre todos:</strong> Una persona anota en su celular. Después de cada ronda, tocá <em>Compartir link</em> y mandalo al grupo — al abrirlo, todos ven los mismos resultados.
+        💡 <strong>Cómo usar entre todos:</strong> Tocá <em>Crear torneo compartido</em> una vez y mandá el link al grupo. Los cambios se actualizan automáticamente en todos los celulares.
     </div>
 
     <div class="card">
         <div class="toolbar">
+            <button class="btn btn-primary" onclick="createSharedTournament()">☁️ Crear torneo compartido</button>
             <button class="btn btn-primary" onclick="shareState()">🔗 Compartir link</button>
             <button class="btn btn-secondary" onclick="exportJSON()">📥 Exportar</button>
             <button class="btn btn-secondary" onclick="importJSON()">📤 Importar</button>
             <button class="btn btn-secondary btn-sm" onclick="resetSchedule()">🔄 Regenerar fixture</button>
             <button class="btn btn-danger btn-sm" onclick="resetAll()">🗑️ Borrar todo</button>
         </div>
+        <div id="sync-status" style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;" aria-live="polite">Guardado en este dispositivo</div>
         <div id="progress-text" style="font-size:0.85rem;color:var(--muted);"></div>
         <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
     </div>
@@ -303,6 +305,9 @@
 <div class="toast" id="toast"></div>
 <input type="file" id="file-input" accept=".json" style="display:none">
 
+<script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-database-compat.js"></script>
 <script>
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -312,6 +317,21 @@
     let players = [];
     let schedule = [];
     let collapsedRounds = {};
+    const firebaseConfig = {
+        apiKey: 'AIzaSyAEWG54OzZ7QMHb6otPJTLwuE8ttbBNnPc',
+        authDomain: 'padel-torneo-ec30a.firebaseapp.com',
+        databaseURL: 'https://padel-torneo-ec30a-default-rtdb.firebaseio.com',
+        projectId: 'padel-torneo-ec30a',
+        storageBucket: 'padel-torneo-ec30a.firebasestorage.app',
+        messagingSenderId: '721713590787',
+        appId: '1:721713590787:web:3df62ebcfc8841e41c5436'
+    };
+    let tournamentId = new URLSearchParams(location.search).get('torneo');
+    let realtimeDb = null;
+    let tournamentRef = null;
+    let remoteSaveTimer = null;
+    let applyingRemoteState = false;
+    let remoteUnsubscribe = null;
 
     function defaultPlayers(n) {
         return Array.from({ length: n }, (_, i) => `Jugador ${i + 1}`);
@@ -494,6 +514,85 @@
         try {
             localStorage.setItem('padel-torneo', JSON.stringify(getState()));
         } catch (e) { /* quota exceeded */ }
+        queueRemoteSave();
+    }
+
+    function setSyncStatus(message) {
+        const status = document.getElementById('sync-status');
+        if (status) status.textContent = message;
+    }
+
+    async function ensureFirebase() {
+        if (realtimeDb) return realtimeDb;
+        try {
+            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+            await firebase.auth().signInAnonymously();
+            realtimeDb = firebase.database();
+            return realtimeDb;
+        } catch (error) {
+            console.error(error);
+            setSyncStatus('No se pudo conectar al torneo compartido');
+            throw error;
+        }
+    }
+
+    async function connectToTournament(id) {
+        try {
+            await ensureFirebase();
+            if (remoteUnsubscribe) remoteUnsubscribe();
+            tournamentId = id;
+            tournamentRef = realtimeDb.ref(`tournaments/${id}`);
+            setSyncStatus('Conectando al torneo compartido…');
+            const listener = tournamentRef.on('value', (snapshot) => {
+                const remote = snapshot.val();
+                if (!remote || !remote.state) {
+                    setSyncStatus('Torneo compartido listo');
+                    return;
+                }
+                applyingRemoteState = true;
+                setState(remote.state);
+                applyingRemoteState = false;
+                setSyncStatus('Sincronizado en todos los dispositivos');
+            }, () => setSyncStatus('No se pudo actualizar el torneo compartido'));
+            remoteUnsubscribe = () => tournamentRef.off('value', listener);
+        } catch (error) { /* status set in ensureFirebase */ }
+    }
+
+    function queueRemoteSave() {
+        if (!tournamentRef || applyingRemoteState) return;
+        clearTimeout(remoteSaveTimer);
+        setSyncStatus('Guardando cambios…');
+        remoteSaveTimer = setTimeout(saveRemoteNow, 350);
+    }
+
+    async function saveRemoteNow() {
+        if (!tournamentRef || applyingRemoteState) return;
+        try {
+            await tournamentRef.set({ state: getState(), updatedAt: firebase.database.ServerValue.TIMESTAMP });
+            setSyncStatus('Sincronizado en todos los dispositivos');
+        } catch (error) {
+            console.error(error);
+            setSyncStatus('No se pudieron guardar los cambios compartidos');
+        }
+    }
+
+    async function createSharedTournament(copyLink = false) {
+        if (!tournamentId) {
+            const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
+            history.replaceState(null, '', `${location.pathname}?torneo=${id}`);
+            await connectToTournament(id);
+            await saveRemoteNow();
+        } else if (!tournamentRef) {
+            await connectToTournament(tournamentId);
+        }
+        if (copyLink) copyTournamentLink();
+        else showToast('¡Torneo compartido creado! Ahora compartí el link.');
+    }
+
+    function copyTournamentLink() {
+        const url = `${location.origin}${location.pathname}?torneo=${tournamentId}`;
+        navigator.clipboard.writeText(url).then(() => showToast('¡Link copiado! Todos verán los cambios al instante.'))
+            .catch(() => prompt('Copiá este link:', url));
     }
 
     function loadLocal() {
@@ -525,7 +624,16 @@
         }
     }
 
-    function shareState() {
+    async function shareState() {
+        if (!tournamentId) {
+            await createSharedTournament(true);
+            return;
+        }
+        if (tournamentRef) {
+            await saveRemoteNow();
+            copyTournamentLink();
+            return;
+        }
         const encoded = encodeState(getState());
         const url = location.origin + location.pathname + '#s=' + encoded;
         navigator.clipboard.writeText(url).then(() => {
@@ -585,7 +693,7 @@
         collapsedRounds = {};
         document.getElementById('player-count').value = numPlayers;
         localStorage.removeItem('padel-torneo');
-        history.replaceState(null, '', location.pathname);
+        if (!tournamentId) history.replaceState(null, '', location.pathname);
         renderAll();
         showToast('Todo reiniciado');
     }
@@ -800,6 +908,7 @@
         if (saved) setState(saved);
         else renderAll();
     }
+    if (tournamentId) connectToTournament(tournamentId);
 
     window.addEventListener('hashchange', () => loadFromHash());
 </script>
