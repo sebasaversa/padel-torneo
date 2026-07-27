@@ -76,6 +76,10 @@
             transition: opacity 0.15s;
         }
         .btn:hover { opacity: 0.85; }
+        .btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
         .btn-primary { background: var(--primary); color: white; }
         .btn-secondary { background: white; color: var(--dark); border: 1px solid var(--border); }
         .btn-danger { background: var(--danger); color: white; }
@@ -99,6 +103,42 @@
             transform: translateX(-50%) translateY(0);
             opacity: 1;
         }
+        .modal {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            background: rgba(31, 41, 55, 0.5);
+        }
+        .modal[hidden] { display: none; }
+        .modal-card {
+            width: min(100%, 400px);
+            padding: 20px;
+            border-radius: 12px;
+            background: white;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+        }
+        .modal-card h2 { margin-bottom: 8px; }
+        .modal-card p { margin: 0 0 14px; color: var(--muted); font-size: 0.9rem; }
+        .modal-card label { display: block; margin-bottom: 6px; font-size: 0.9rem; font-weight: 600; }
+        .modal-card input {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid var(--primary);
+            border-radius: 8px;
+            font: inherit;
+            font-size: 16px;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .modal-actions .btn { min-height: 44px; }
         .players-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -297,7 +337,7 @@
 
     <div class="card">
         <div class="toolbar">
-            <button class="btn btn-primary" onclick="createSharedTournament()">☁️ Crear torneo compartido</button>
+            <button class="btn btn-primary" id="create-shared-button" onclick="createSharedTournament()">☁️ Crear torneo compartido</button>
             <button class="btn btn-primary" onclick="shareState()">🔗 Compartir link</button>
             <button class="btn btn-secondary" onclick="exportJSON()">📥 Exportar</button>
             <button class="btn btn-secondary" onclick="importJSON()">📤 Importar</button>
@@ -362,6 +402,19 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="modal" id="tournament-name-modal" role="dialog" aria-modal="true" aria-labelledby="tournament-name-modal-title" hidden>
+    <div class="modal-card">
+        <h2 id="tournament-name-modal-title">Crear torneo compartido</h2>
+        <p>Elegí un nombre para identificarlo en el grupo.</p>
+        <label for="tournament-name-input">Nombre del torneo</label>
+        <input type="text" id="tournament-name-input" maxlength="60" placeholder="Ej.: Pádel del viernes"
+               onkeydown="if (event.key === 'Enter') confirmTournamentName(); if (event.key === 'Escape') cancelTournamentName()">
+        <div class="modal-actions">
+            <button class="btn btn-secondary" type="button" onclick="cancelTournamentName()">Cancelar</button>
+            <button class="btn btn-primary" type="button" onclick="confirmTournamentName()">Continuar</button>
+        </div>
+    </div>
+</div>
 <input type="file" id="file-input" accept=".json" style="display:none">
 
 <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
@@ -381,6 +434,7 @@
     let collapsedRounds = {};
     let tournamentName = '';
     let tournamentDate = '';
+    let resolveTournamentName = null;
     const firebaseConfig = {
         apiKey: 'AIzaSyAEWG54OzZ7QMHb6otPJTLwuE8ttbBNnPc',
         authDomain: 'padel-torneo-ec30a.firebaseapp.com',
@@ -529,7 +583,17 @@
     function updateTournamentHeader() {
         const title = document.getElementById('tournament-title');
         const date = document.getElementById('tournament-date');
-        if (tournamentId) {
+        const createButton = document.getElementById('create-shared-button');
+        const isSharedTournament = Boolean(tournamentId);
+        createButton.disabled = isSharedTournament;
+        createButton.textContent = isSharedTournament
+            ? '☁️ Torneo compartido activo'
+            : '☁️ Crear torneo compartido';
+        createButton.title = isSharedTournament
+            ? 'Ya estás dentro de un torneo compartido'
+            : '';
+
+        if (isSharedTournament) {
             const visibleName = tournamentName || 'Torneo compartido';
             title.textContent = `🏆 ${visibleName}`;
             date.textContent = tournamentDate
@@ -704,9 +768,33 @@
         }
     }
 
+    function askTournamentName() {
+        const modal = document.getElementById('tournament-name-modal');
+        const input = document.getElementById('tournament-name-input');
+        input.value = '';
+        modal.hidden = false;
+        setTimeout(() => input.focus(), 0);
+        return new Promise(resolve => { resolveTournamentName = resolve; });
+    }
+
+    function closeTournamentNameModal(value) {
+        document.getElementById('tournament-name-modal').hidden = true;
+        if (resolveTournamentName) resolveTournamentName(value);
+        resolveTournamentName = null;
+    }
+
+    function confirmTournamentName() {
+        const name = document.getElementById('tournament-name-input').value.trim();
+        closeTournamentNameModal(name || 'Torneo de Pádel');
+    }
+
+    function cancelTournamentName() {
+        closeTournamentNameModal(null);
+    }
+
     async function createSharedTournament(copyLink = false) {
         if (!tournamentId) {
-            const chosenName = prompt('¿Cómo se llama este torneo?', 'Torneo de Pádel');
+            const chosenName = await askTournamentName();
             if (chosenName === null) return;
 
             tournamentName = chosenName.trim() || 'Torneo de Pádel';
