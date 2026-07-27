@@ -299,6 +299,16 @@
             </div>
             <span class="count-hint" id="count-hint"></span>
         </div>
+        <div class="player-count-row">
+            <label for="games-per-set">Games por set:</label>
+            <div class="count-controls">
+                <button class="btn btn-secondary btn-sm" onclick="changeGamesPerSet(-1)" aria-label="Reducir games por set">−</button>
+                <input type="number" id="games-per-set" min="1" max="20" value="4"
+                       oninput="setGamesPerSet(parseInt(this.value, 10))">
+                <button class="btn btn-secondary btn-sm" onclick="changeGamesPerSet(1)" aria-label="Aumentar games por set">+</button>
+            </div>
+            <span class="count-hint">Puntaje objetivo de cada partido</span>
+        </div>
         <div class="players-grid" id="players-container"></div>
     </div>
 
@@ -323,7 +333,7 @@
     </div>
 
     <div class="card">
-        <h2>3. Partidos (a 4 games)</h2>
+        <h2 id="matches-title">3. Partidos (a 4 games)</h2>
         <div id="rounds-container"></div>
     </div>
 </div>
@@ -338,8 +348,11 @@
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
     const MAX_COURTS = 2;
+    const MIN_GAMES_PER_SET = 1;
+    const MAX_GAMES_PER_SET = 20;
 
     let numPlayers = 9;
+    let gamesPerSet = 4;
     let players = [];
     let schedule = [];
     let collapsedRounds = {};
@@ -479,11 +492,12 @@
         const rounds = getNumRounds(numPlayers);
         let restText = rest === 0 ? 'todos juegan' : `${rest} descansa${rest > 1 ? 'n' : ''} por ronda`;
         document.getElementById('subtitle').textContent =
-            `${numPlayers} jugadores · ${courts} cancha${courts > 1 ? 's' : ''} · ${rounds} rondas · ${restText} · Sets a 4 games`;
+            `${numPlayers} jugadores · ${courts} cancha${courts > 1 ? 's' : ''} · ${rounds} rondas · ${restText} · Sets a ${gamesPerSet} games`;
         document.getElementById('count-hint').textContent =
             rest > 0
                 ? `${rounds} rondas para rotar el descanso`
                 : `${rounds} rondas de rotación de parejas`;
+        document.getElementById('matches-title').textContent = `3. Partidos (a ${gamesPerSet} games)`;
     }
 
     function resizePlayers(newCount) {
@@ -498,6 +512,29 @@
 
     function changePlayerCount(delta) {
         setPlayerCount(numPlayers + delta);
+    }
+
+    function changeGamesPerSet(delta) {
+        setGamesPerSet(gamesPerSet + delta);
+    }
+
+    function setGamesPerSet(newTarget) {
+        if (isNaN(newTarget)) {
+            document.getElementById('games-per-set').value = gamesPerSet;
+            return;
+        }
+        newTarget = Math.max(MIN_GAMES_PER_SET, Math.min(MAX_GAMES_PER_SET, newTarget));
+        if (newTarget === gamesPerSet) {
+            document.getElementById('games-per-set').value = gamesPerSet;
+            return;
+        }
+
+        gamesPerSet = newTarget;
+        document.getElementById('games-per-set').value = gamesPerSet;
+        updateSubtitle();
+        saveLocal();
+        renderRounds();
+        showToast(`Sets a ${gamesPerSet} games`);
     }
 
     function setPlayerCount(newCount) {
@@ -523,16 +560,21 @@
     }
 
     function getState() {
-        return { numPlayers, players, schedule, collapsedRounds };
+        return { numPlayers, gamesPerSet, players, schedule, collapsedRounds };
     }
 
     function setState(state) {
         if (state.numPlayers) numPlayers = state.numPlayers;
         else if (state.players) numPlayers = state.players.length;
+        const savedGamesPerSet = parseInt(state.gamesPerSet, 10);
+        gamesPerSet = Number.isNaN(savedGamesPerSet)
+            ? 4
+            : Math.max(MIN_GAMES_PER_SET, Math.min(MAX_GAMES_PER_SET, savedGamesPerSet));
         if (state.players) players = state.players;
         if (state.schedule) schedule = state.schedule;
         if (state.collapsedRounds) collapsedRounds = state.collapsedRounds;
         document.getElementById('player-count').value = numPlayers;
+        document.getElementById('games-per-set').value = gamesPerSet;
         renderAll();
     }
 
@@ -714,10 +756,12 @@
     function resetAll() {
         if (!confirm('¿Borrar todo (nombres y resultados)?')) return;
         numPlayers = 9;
+        gamesPerSet = 4;
         players = defaultPlayers(numPlayers);
         generateSchedule();
         collapsedRounds = {};
         document.getElementById('player-count').value = numPlayers;
+        document.getElementById('games-per-set').value = gamesPerSet;
         localStorage.removeItem('padel-torneo');
         if (!tournamentId) history.replaceState(null, '', location.pathname);
         renderAll();
@@ -766,7 +810,10 @@
     }
 
     function updateScore(roundIdx, matchIdx, team, value) {
-        schedule[roundIdx].matches[matchIdx][team] = value;
+        const parsed = parseInt(value, 10);
+        schedule[roundIdx].matches[matchIdx][team] = value === '' || Number.isNaN(parsed)
+            ? ''
+            : Math.max(0, Math.min(gamesPerSet, parsed));
         saveLocal();
         calculateStats();
         updateProgress();
@@ -775,7 +822,7 @@
 
     function adjustScore(roundIdx, matchIdx, team, amount) {
         const current = parseInt(schedule[roundIdx].matches[matchIdx][team], 10);
-        const next = Math.max(0, Math.min(4, (Number.isNaN(current) ? 0 : current) + amount));
+        const next = Math.max(0, Math.min(gamesPerSet, (Number.isNaN(current) ? 0 : current) + amount));
         updateScore(roundIdx, matchIdx, team, next);
     }
 
@@ -850,9 +897,9 @@
                         <div class="score-control">
                             <button type="button" class="score-adjust" aria-label="Bajar puntaje del primer equipo en cancha ${m.court}"
                                     onclick="adjustScore(${rIdx}, ${mIdx}, 'score1', -1)">−</button>
-                            <input type="number" min="0" max="4" class="score-input" placeholder="0"
+                            <input type="number" min="0" max="${gamesPerSet}" class="score-input" placeholder="0"
                                    value="${m.score1}" inputmode="numeric"
-                                   oninput="updateScore(${rIdx}, ${mIdx}, 'score1', this.value)">
+                                   onchange="updateScore(${rIdx}, ${mIdx}, 'score1', this.value)">
                             <button type="button" class="score-adjust" aria-label="Subir puntaje del primer equipo en cancha ${m.court}"
                                     onclick="adjustScore(${rIdx}, ${mIdx}, 'score1', 1)">+</button>
                         </div>
@@ -860,9 +907,9 @@
                         <div class="score-control">
                             <button type="button" class="score-adjust" aria-label="Bajar puntaje del segundo equipo en cancha ${m.court}"
                                     onclick="adjustScore(${rIdx}, ${mIdx}, 'score2', -1)">−</button>
-                            <input type="number" min="0" max="4" class="score-input" placeholder="0"
+                            <input type="number" min="0" max="${gamesPerSet}" class="score-input" placeholder="0"
                                    value="${m.score2}" inputmode="numeric"
-                                   oninput="updateScore(${rIdx}, ${mIdx}, 'score2', this.value)">
+                                   onchange="updateScore(${rIdx}, ${mIdx}, 'score2', this.value)">
                             <button type="button" class="score-adjust" aria-label="Subir puntaje del segundo equipo en cancha ${m.court}"
                                     onclick="adjustScore(${rIdx}, ${mIdx}, 'score2', 1)">+</button>
                         </div>
