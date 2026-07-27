@@ -332,7 +332,7 @@
     <p class="subtitle" id="subtitle">9 jugadores · 2 canchas · Sets a 4 games · Rotación automática</p>
 
     <div class="info-box">
-        💡 <strong>Cómo usar entre todos:</strong> Tocá <em>Crear torneo compartido</em> una vez y mandá el link al grupo. Los cambios se actualizan automáticamente en todos los celulares.
+        💡 <strong>Cómo usar entre todos:</strong> Tocá <em>Crear torneo compartido</em> una vez y mandá el link al grupo. Los cambios se actualizan automáticamente en todos los celulares. Al cambiar un jugador, se intercambia automáticamente dentro de esa ronda para que nadie se repita.
     </div>
 
     <div class="card">
@@ -962,8 +962,44 @@
         return html;
     }
 
+    function getRoundPlayerSlots(round) {
+        const roles = ['t1_p1', 't1_p2', 't2_p1', 't2_p2'];
+        return round.matches.flatMap(match => roles.map(role => ({ match, role })));
+    }
+
+    function normalizeRoundPlayers(round) {
+        const slots = getRoundPlayerSlots(round);
+        const usedPlayers = new Set();
+
+        slots.forEach(slot => {
+            const playerId = slot.match[slot.role];
+            if (Number.isInteger(playerId) && playerId >= 0 && playerId < numPlayers && !usedPlayers.has(playerId)) {
+                usedPlayers.add(playerId);
+            } else {
+                slot.match[slot.role] = null;
+            }
+        });
+
+        const availablePlayers = Array.from({ length: numPlayers }, (_, id) => id)
+            .filter(id => !usedPlayers.has(id));
+        slots.forEach(slot => {
+            if (slot.match[slot.role] === null) slot.match[slot.role] = availablePlayers.shift();
+        });
+    }
+
     function updateMatchPlayer(roundIdx, matchIdx, role, newValue) {
-        schedule[roundIdx].matches[matchIdx][role] = parseInt(newValue);
+        const round = schedule[roundIdx];
+        const selectedPlayer = parseInt(newValue, 10);
+        const targetMatch = round.matches[matchIdx];
+        const previousPlayer = targetMatch[role];
+        if (Number.isNaN(selectedPlayer) || selectedPlayer === previousPlayer) return;
+
+        const selectedPlayerSlot = getRoundPlayerSlots(round)
+            .find(slot => (slot.match !== targetMatch || slot.role !== role) && slot.match[slot.role] === selectedPlayer);
+        if (selectedPlayerSlot) selectedPlayerSlot.match[selectedPlayerSlot.role] = previousPlayer;
+
+        targetMatch[role] = selectedPlayer;
+        normalizeRoundPlayers(round);
         saveLocal();
         renderRounds();
         calculateStats();
