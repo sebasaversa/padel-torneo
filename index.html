@@ -185,11 +185,31 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 8px;
+            gap: 10px;
             margin-top: 8px;
         }
+        .score-control {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .score-adjust {
+            width: 38px;
+            height: 42px;
+            padding: 0;
+            border: 1px solid var(--primary);
+            border-radius: 8px;
+            background: white;
+            color: var(--primary);
+            font-size: 1.35rem;
+            font-weight: 700;
+            line-height: 1;
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .score-adjust:active { background: var(--primary-light); }
         .score-input {
-            width: 56px;
+            width: 52px;
             padding: 10px;
             text-align: center;
             font-weight: bold;
@@ -197,6 +217,12 @@
             border: 2px solid var(--primary);
             border-radius: 8px;
         }
+        .score-input::-webkit-inner-spin-button,
+        .score-input::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        .score-input { -moz-appearance: textfield; }
         .score-sep { font-weight: bold; color: var(--muted); }
         .rest-badge {
             background: #fef3c7;
@@ -747,6 +773,12 @@
         renderRounds();
     }
 
+    function adjustScore(roundIdx, matchIdx, team, amount) {
+        const current = parseInt(schedule[roundIdx].matches[matchIdx][team], 10);
+        const next = Math.max(0, Math.min(4, (Number.isNaN(current) ? 0 : current) + amount));
+        updateScore(roundIdx, matchIdx, team, next);
+    }
+
     function getRestingPlayers(round) {
         const playing = new Set();
         round.matches.forEach(m => {
@@ -815,13 +847,25 @@
                         </div>
                     </div>
                     <div class="score-row">
-                        <input type="number" min="0" max="4" class="score-input" placeholder="0"
-                               value="${m.score1}" inputmode="numeric"
-                               oninput="updateScore(${rIdx}, ${mIdx}, 'score1', this.value)">
+                        <div class="score-control">
+                            <button type="button" class="score-adjust" aria-label="Bajar puntaje del primer equipo en cancha ${m.court}"
+                                    onclick="adjustScore(${rIdx}, ${mIdx}, 'score1', -1)">−</button>
+                            <input type="number" min="0" max="4" class="score-input" placeholder="0"
+                                   value="${m.score1}" inputmode="numeric"
+                                   oninput="updateScore(${rIdx}, ${mIdx}, 'score1', this.value)">
+                            <button type="button" class="score-adjust" aria-label="Subir puntaje del primer equipo en cancha ${m.court}"
+                                    onclick="adjustScore(${rIdx}, ${mIdx}, 'score1', 1)">+</button>
+                        </div>
                         <span class="score-sep">—</span>
-                        <input type="number" min="0" max="4" class="score-input" placeholder="0"
-                               value="${m.score2}" inputmode="numeric"
-                               oninput="updateScore(${rIdx}, ${mIdx}, 'score2', this.value)">
+                        <div class="score-control">
+                            <button type="button" class="score-adjust" aria-label="Bajar puntaje del segundo equipo en cancha ${m.court}"
+                                    onclick="adjustScore(${rIdx}, ${mIdx}, 'score2', -1)">−</button>
+                            <input type="number" min="0" max="4" class="score-input" placeholder="0"
+                                   value="${m.score2}" inputmode="numeric"
+                                   oninput="updateScore(${rIdx}, ${mIdx}, 'score2', this.value)">
+                            <button type="button" class="score-adjust" aria-label="Subir puntaje del segundo equipo en cancha ${m.court}"
+                                    onclick="adjustScore(${rIdx}, ${mIdx}, 'score2', 1)">+</button>
+                        </div>
                     </div>
                 </div>`;
             });
