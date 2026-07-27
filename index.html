@@ -155,6 +155,29 @@
             font-size: 0.78rem;
             font-weight: 400;
         }
+        .score-warning {
+            margin: 8px 0 0;
+            color: #92400e;
+            font-size: 0.78rem;
+            font-weight: 600;
+            text-align: center;
+        }
+        .summary-content {
+            color: var(--dark);
+            font-size: 0.9rem;
+            line-height: 1.45;
+        }
+        .summary-content h3 { margin-top: 16px; }
+        .summary-highlight {
+            padding: 10px;
+            border-radius: 8px;
+            background: var(--primary-light);
+            font-weight: 600;
+        }
+        .summary-list {
+            margin: 8px 0 0;
+            padding-left: 20px;
+        }
         .players-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -355,12 +378,15 @@
         <div class="toolbar">
             <button class="btn btn-primary" id="create-shared-button" onclick="createSharedTournament()">☁️ Crear torneo compartido</button>
             <button class="btn btn-primary" onclick="shareState()">🔗 Compartir link</button>
+            <button class="btn btn-secondary" id="undo-button" onclick="undoLastChange()" disabled>↩ Deshacer</button>
+            <button class="btn btn-secondary" onclick="openSummaryModal()">🏁 Resumen</button>
             <button class="btn btn-secondary" onclick="exportJSON()">📥 Exportar</button>
             <button class="btn btn-secondary" onclick="importJSON()">📤 Importar</button>
             <button class="btn btn-secondary btn-sm" onclick="resetSchedule()">🔄 Regenerar fixture</button>
             <button class="btn btn-danger btn-sm" onclick="resetAll()">🗑️ Borrar todo</button>
         </div>
         <div id="sync-status" style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;" aria-live="polite">Guardado en este dispositivo</div>
+        <div id="presence-status" style="font-size:0.82rem;color:var(--muted);margin-bottom:8px;" aria-live="polite" hidden></div>
         <div id="progress-text" style="font-size:0.85rem;color:var(--muted);"></div>
         <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
     </div>
@@ -448,6 +474,17 @@
         </div>
     </div>
 </div>
+<div class="modal" id="summary-modal" role="dialog" aria-modal="true" aria-labelledby="summary-modal-title" hidden>
+    <div class="modal-card">
+        <h2 id="summary-modal-title">Resumen del torneo</h2>
+        <div class="summary-content" id="summary-content"></div>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" type="button" onclick="closeSummaryModal()">Cerrar</button>
+            <button class="btn btn-secondary" type="button" onclick="copyTournamentSummary()">Copiar</button>
+            <button class="btn btn-primary" type="button" onclick="shareTournamentSummary()">Compartir</button>
+        </div>
+    </div>
+</div>
 <input type="file" id="file-input" accept=".json" style="display:none">
 
 <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
@@ -469,6 +506,8 @@
     let tournamentDate = '';
     let resolveTournamentName = null;
     let resolvePlayerChange = null;
+    let undoStack = [];
+    const MAX_UNDO_STEPS = 20;
     const firebaseConfig = {
         apiKey: 'AIzaSyAEWG54OzZ7QMHb6otPJTLwuE8ttbBNnPc',
         authDomain: 'padel-torneo-ec30a.firebaseapp.com',
@@ -484,6 +523,23 @@
     let remoteSaveTimer = null;
     let applyingRemoteState = false;
     let remoteUnsubscribe = null;
+    let presenceRef = null;
+    let presenceUnsubscribe = null;
+    let lastSavedStateSignature = null;
+    const presenceId = (() => {
+        const key = 'padel-torneo-presence-id';
+        const generatedId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
+        try {
+            let id = sessionStorage.getItem(key);
+            if (!id) {
+                id = generatedId();
+                sessionStorage.setItem(key, id);
+            }
+            return id;
+        } catch (error) {
+            return generatedId();
+        }
+    })();
 
     function defaultPlayers(n) {
         return Array.from({ length: n }, (_, i) => `Jugador ${i + 1}`);
@@ -639,6 +695,7 @@
         }
         title.textContent = '🏆 Torneo Americano Pádel';
         date.hidden = true;
+        setPresenceStatus(0);
         document.title = 'Torneo Americano Pádel';
     }
 
@@ -685,6 +742,7 @@
             return;
         }
 
+        rememberStateForUndo();
         gamesPerSet = newTarget;
         document.getElementById('games-per-set').value = gamesPerSet;
         updateSubtitle();
@@ -707,6 +765,7 @@
             return;
         }
 
+        rememberStateForUndo();
         resizePlayers(newCount);
         generateSchedule();
         collapsedRounds = {};
@@ -717,6 +776,35 @@
 
     function getState() {
         return { numPlayers, gamesPerSet, players, schedule, collapsedRounds, tournamentName, tournamentDate };
+    }
+
+    function getStateSignature(value) {
+        if (Array.isArray(value)) return `[${value.map(getStateSignature).join(',')}]`;
+        if (value && typeof value === 'object') {
+            return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${getStateSignature(value[key])}`).join(',')}}`;
+        }
+        return JSON.stringify(value);
+    }
+
+    function rememberStateForUndo() {
+        if (applyingRemoteState) return;
+        undoStack.push(JSON.parse(JSON.stringify(getState())));
+        if (undoStack.length > MAX_UNDO_STEPS) undoStack.shift();
+        updateUndoButton();
+    }
+
+    function updateUndoButton() {
+        const button = document.getElementById('undo-button');
+        if (button) button.disabled = undoStack.length === 0;
+    }
+
+    function undoLastChange() {
+        const previousState = undoStack.pop();
+        if (!previousState) return;
+        setState(previousState);
+        saveLocal();
+        updateUndoButton();
+        showToast('Último cambio deshecho');
     }
 
     function setState(state) {
@@ -748,6 +836,17 @@
         if (status) status.textContent = message;
     }
 
+    function setPresenceStatus(count) {
+        const status = document.getElementById('presence-status');
+        if (!status) return;
+        if (!tournamentId) {
+            status.hidden = true;
+            return;
+        }
+        status.hidden = false;
+        status.textContent = `👥 ${count} persona${count === 1 ? '' : 's'} conectada${count === 1 ? '' : 's'}`;
+    }
+
     async function ensureFirebase() {
         if (realtimeDb) return realtimeDb;
         try {
@@ -766,22 +865,43 @@
         try {
             await ensureFirebase();
             if (remoteUnsubscribe) remoteUnsubscribe();
+            if (presenceUnsubscribe) presenceUnsubscribe();
+            if (presenceRef) presenceRef.remove().catch(() => {});
             tournamentId = id;
+            lastSavedStateSignature = null;
             tournamentRef = realtimeDb.ref(`tournaments/${id}`);
             setSyncStatus('Conectando al torneo compartido…');
-            const listener = tournamentRef.on('value', (snapshot) => {
-                const remote = snapshot.val();
-                if (!remote || !remote.state) {
+            const stateRef = tournamentRef.child('state');
+            const listener = stateRef.on('value', (snapshot) => {
+                const remoteState = snapshot.val();
+                if (!remoteState) {
                     setSyncStatus('Torneo compartido listo');
                     return;
                 }
+                const remoteSignature = getStateSignature(remoteState);
+                if (remoteSignature !== lastSavedStateSignature) {
+                    undoStack = [];
+                    updateUndoButton();
+                }
                 applyingRemoteState = true;
-                setState(remote.state);
+                setState(remoteState);
                 applyingRemoteState = false;
                 setSyncStatus('Sincronizado en todos los dispositivos');
             }, () => setSyncStatus('No se pudo actualizar el torneo compartido'));
-            remoteUnsubscribe = () => tournamentRef.off('value', listener);
+            remoteUnsubscribe = () => stateRef.off('value', listener);
+            await connectPresence();
         } catch (error) { /* status set in ensureFirebase */ }
+    }
+
+    async function connectPresence() {
+        presenceRef = tournamentRef.child(`presence/${presenceId}`);
+        const presenceListRef = tournamentRef.child('presence');
+        const listener = presenceListRef.on('value', snapshot => {
+            setPresenceStatus(snapshot.numChildren());
+        });
+        presenceUnsubscribe = () => presenceListRef.off('value', listener);
+        await presenceRef.onDisconnect().remove();
+        await presenceRef.set({ connectedAt: firebase.database.ServerValue.TIMESTAMP });
     }
 
     function queueRemoteSave() {
@@ -794,7 +914,9 @@
     async function saveRemoteNow() {
         if (!tournamentRef || applyingRemoteState) return;
         try {
-            await tournamentRef.set({ state: getState(), updatedAt: firebase.database.ServerValue.TIMESTAMP });
+            const state = getState();
+            lastSavedStateSignature = getStateSignature(state);
+            await tournamentRef.update({ state, updatedAt: firebase.database.ServerValue.TIMESTAMP });
             setSyncStatus('Sincronizado en todos los dispositivos');
         } catch (error) {
             console.error(error);
@@ -925,6 +1047,7 @@
         const reader = new FileReader();
         reader.onload = (ev) => {
             try {
+                rememberStateForUndo();
                 setState(JSON.parse(ev.target.result));
                 saveLocal();
                 showToast('Datos importados');
@@ -938,6 +1061,7 @@
 
     function resetSchedule() {
         if (!confirm('¿Regenerar el fixture? Se pierden los resultados pero se mantienen los nombres.')) return;
+        rememberStateForUndo();
         const savedPlayers = [...players];
         generateSchedule();
         players = savedPlayers;
@@ -949,6 +1073,7 @@
 
     function resetAll() {
         if (!confirm('¿Borrar todo (nombres y resultados)?')) return;
+        rememberStateForUndo();
         numPlayers = 9;
         gamesPerSet = 4;
         players = defaultPlayers(numPlayers);
@@ -956,8 +1081,11 @@
         collapsedRounds = {};
         document.getElementById('player-count').value = numPlayers;
         document.getElementById('games-per-set').value = gamesPerSet;
-        localStorage.removeItem('padel-torneo');
-        if (!tournamentId) history.replaceState(null, '', location.pathname);
+        if (tournamentId) saveLocal();
+        else {
+            localStorage.removeItem('padel-torneo');
+            history.replaceState(null, '', location.pathname);
+        }
         renderAll();
         showToast('Todo reiniciado');
     }
@@ -978,6 +1106,7 @@
             input.value = p;
             input.placeholder = `Jugador ${idx + 1}`;
             input.addEventListener('change', (e) => {
+                rememberStateForUndo();
                 players[idx] = e.target.value.trim() || `Jugador ${idx + 1}`;
                 saveLocal();
                 renderRounds();
@@ -1081,10 +1210,12 @@
                 showToast('No se puede cambiar el resto: ya hay resultados cargados desde esta ronda.');
                 return;
             }
+            rememberStateForUndo();
             for (let index = roundIdx; index < schedule.length; index++) {
                 swapPlayersInRound(schedule[index], previousPlayer, selectedPlayer);
             }
         } else {
+            rememberStateForUndo();
             applySingleRoundPlayerChange(round, targetMatch, role, previousPlayer, selectedPlayer);
         }
         saveLocal();
@@ -1094,9 +1225,12 @@
 
     function updateScore(roundIdx, matchIdx, team, value) {
         const parsed = parseInt(value, 10);
-        schedule[roundIdx].matches[matchIdx][team] = value === '' || Number.isNaN(parsed)
+        const nextScore = value === '' || Number.isNaN(parsed)
             ? ''
             : Math.max(0, Math.min(gamesPerSet, parsed));
+        if (schedule[roundIdx].matches[matchIdx][team] === nextScore) return;
+        rememberStateForUndo();
+        schedule[roundIdx].matches[matchIdx][team] = nextScore;
         saveLocal();
         calculateStats();
         updateProgress();
@@ -1124,6 +1258,20 @@
 
     function isMatchDone(m) {
         return m.score1 !== '' && m.score2 !== '';
+    }
+
+    function getScoreWarning(m) {
+        if (!isMatchDone(m)) return '';
+        const score1 = parseInt(m.score1, 10);
+        const score2 = parseInt(m.score2, 10);
+        if (score1 === score2) return 'Empate: revisá el resultado antes de cerrar la ronda.';
+        if (score1 < gamesPerSet && score2 < gamesPerSet) {
+            return `Ningún equipo llegó a ${gamesPerSet} games.`;
+        }
+        if (score1 === gamesPerSet && score2 === gamesPerSet) {
+            return 'Ambos equipos llegaron al objetivo de games.';
+        }
+        return '';
     }
 
     function isRoundDone(round) {
@@ -1160,6 +1308,7 @@
 
             round.matches.forEach((m, mIdx) => {
                 const mDone = isMatchDone(m);
+                const scoreWarning = getScoreWarning(m);
                 html += `
                 <div class="match ${mDone ? 'match-done' : ''}">
                     <div class="court-title">📍 Cancha ${m.court}</div>
@@ -1197,6 +1346,7 @@
                                     onclick="adjustScore(${rIdx}, ${mIdx}, 'score2', 1)">+</button>
                         </div>
                     </div>
+                    ${scoreWarning ? `<div class="score-warning">⚠️ ${scoreWarning}</div>` : ''}
                 </div>`;
             });
 
@@ -1205,9 +1355,9 @@
         });
     }
 
-    function calculateStats() {
+    function getLeaderboardStats() {
         const stats = players.map((name, id) => ({
-            id, name, v: 0, d: 0, gf: 0, gc: 0, dif: 0
+            id, name, v: 0, d: 0, gf: 0, gc: 0, dif: 0, played: 0
         }));
 
         schedule.forEach(round => {
@@ -1220,6 +1370,7 @@
 
                 t1.forEach(p => {
                     if (p >= stats.length) return;
+                    stats[p].played += 1;
                     stats[p].gf += s1;
                     stats[p].gc += s2;
                     if (s1 > s2) stats[p].v += 1;
@@ -1227,6 +1378,7 @@
                 });
                 t2.forEach(p => {
                     if (p >= stats.length) return;
+                    stats[p].played += 1;
                     stats[p].gf += s2;
                     stats[p].gc += s1;
                     if (s2 > s1) stats[p].v += 1;
@@ -1241,6 +1393,11 @@
             if (b.dif !== a.dif) return b.dif - a.dif;
             return b.gf - a.gf;
         });
+        return stats;
+    }
+
+    function calculateStats() {
+        const stats = getLeaderboardStats();
 
         const tbody = document.getElementById('leaderboard-body');
         tbody.innerHTML = stats.map((s, idx) => `
@@ -1256,6 +1413,106 @@
         `).join('');
     }
 
+    function escapeHTML(value) {
+        return String(value).replace(/[&<>'"]/g, char => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+        }[char]));
+    }
+
+    function getBestStreak() {
+        const current = Array(numPlayers).fill(0);
+        const best = Array(numPlayers).fill(0);
+        schedule.forEach(round => round.matches.forEach(match => {
+            if (!isMatchDone(match)) return;
+            const score1 = parseInt(match.score1, 10);
+            const score2 = parseInt(match.score2, 10);
+            const team1 = [match.t1_p1, match.t1_p2];
+            const team2 = [match.t2_p1, match.t2_p2];
+            if (score1 === score2) {
+                [...team1, ...team2].forEach(player => { current[player] = 0; });
+                return;
+            }
+            const winners = score1 > score2 ? team1 : team2;
+            const losers = score1 > score2 ? team2 : team1;
+            winners.forEach(player => {
+                current[player] += 1;
+                best[player] = Math.max(best[player], current[player]);
+            });
+            losers.forEach(player => { current[player] = 0; });
+        }));
+        const longest = Math.max(...best);
+        return {
+            longest,
+            players: longest ? best.map((streak, index) => streak === longest ? players[index] : null).filter(Boolean) : []
+        };
+    }
+
+    function getTournamentSummaryText() {
+        const stats = getLeaderboardStats();
+        const completed = schedule.reduce((total, round) => total + round.matches.filter(isMatchDone).length, 0);
+        const total = schedule.reduce((count, round) => count + round.matches.length, 0);
+        const streak = getBestStreak();
+        const title = tournamentName || 'Torneo Americano Pádel';
+        const date = tournamentDate ? formatTournamentDate(tournamentDate) : '';
+        const positions = stats.slice(0, 3).map((player, index) =>
+            `${['🥇', '🥈', '🥉'][index]} ${player.name}: ${player.v}V · Dif ${player.dif >= 0 ? '+' : ''}${player.dif}`
+        );
+        const streakText = streak.longest
+            ? `🔥 Mejor racha: ${streak.players.join(', ')} (${streak.longest})`
+            : '🔥 Mejor racha: todavía sin resultados';
+        return [
+            `🏆 ${title}`,
+            date,
+            `📊 ${completed} de ${total} partidos anotados`,
+            '',
+            ...positions,
+            '',
+            streakText
+        ].filter((line, index, list) => line || (index > 0 && list[index - 1] !== '')).join('\n');
+    }
+
+    function openSummaryModal() {
+        const stats = getLeaderboardStats();
+        const streak = getBestStreak();
+        const completed = schedule.reduce((total, round) => total + round.matches.filter(isMatchDone).length, 0);
+        const total = schedule.reduce((count, round) => count + round.matches.length, 0);
+        const leader = stats[0];
+        const positions = stats.slice(0, 3).map((player, index) =>
+            `<li>${['🥇', '🥈', '🥉'][index]} <strong>${escapeHTML(player.name)}</strong> · ${player.v}V, ${player.d}D, Dif ${player.dif >= 0 ? '+' : ''}${player.dif}</li>`
+        ).join('');
+        document.getElementById('summary-content').innerHTML = `
+            <div class="summary-highlight">🏆 MVP actual: ${escapeHTML(leader.name)} · ${leader.v} victorias · Dif ${leader.dif >= 0 ? '+' : ''}${leader.dif}</div>
+            <p>${completed} de ${total} partidos anotados.</p>
+            <h3>Posiciones</h3>
+            <ol class="summary-list">${positions}</ol>
+            <h3>Racha</h3>
+            <p>${streak.longest ? `🔥 ${escapeHTML(streak.players.join(', '))} lleva la mejor racha: ${streak.longest} victoria${streak.longest > 1 ? 's' : ''}.` : '🔥 Cargá resultados para calcular la mejor racha.'}</p>`;
+        document.getElementById('summary-modal').hidden = false;
+    }
+
+    function closeSummaryModal() {
+        document.getElementById('summary-modal').hidden = true;
+    }
+
+    function copyTournamentSummary() {
+        navigator.clipboard.writeText(getTournamentSummaryText())
+            .then(() => showToast('Resumen copiado'))
+            .catch(() => prompt('Copiá este resumen:', getTournamentSummaryText()));
+    }
+
+    async function shareTournamentSummary() {
+        const text = getTournamentSummaryText();
+        if (navigator.share) {
+            try {
+                await navigator.share({ title: tournamentName || 'Torneo Americano Pádel', text });
+            } catch (error) {
+                if (error.name !== 'AbortError') copyTournamentSummary();
+            }
+            return;
+        }
+        copyTournamentSummary();
+    }
+
     function updateProgress() {
         const total = schedule.reduce((acc, r) => acc + r.matches.length, 0);
         let done = 0;
@@ -1268,6 +1525,7 @@
 
     function renderAll() {
         updateTournamentHeader();
+        updateUndoButton();
         updateSubtitle();
         renderPlayers();
         renderRounds();
