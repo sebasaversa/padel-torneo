@@ -139,6 +139,22 @@
             margin-top: 16px;
         }
         .modal-actions .btn { min-height: 44px; }
+        .choice-actions {
+            display: grid;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        .choice-actions .btn {
+            width: 100%;
+            min-height: 52px;
+            text-align: left;
+        }
+        .choice-actions .btn span {
+            display: block;
+            margin-top: 2px;
+            font-size: 0.78rem;
+            font-weight: 400;
+        }
         .players-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -332,7 +348,7 @@
     <p class="subtitle" id="subtitle">9 jugadores · 2 canchas · Sets a 4 games · Rotación automática</p>
 
     <div class="info-box">
-        💡 <strong>Cómo usar entre todos:</strong> Tocá <em>Crear torneo compartido</em> una vez y mandá el link al grupo. Los cambios se actualizan automáticamente en todos los celulares. Al cambiar un jugador, se intercambia automáticamente dentro de esa ronda para que nadie se repita.
+        💡 <strong>Cómo usar entre todos:</strong> Tocá <em>Crear torneo compartido</em> una vez y mandá el link al grupo. Los cambios se actualizan automáticamente en todos los celulares. Al cambiar un jugador, elegí si el cambio es solo para esa ronda o para el resto del fixture.
     </div>
 
     <div class="card">
@@ -415,6 +431,23 @@
         </div>
     </div>
 </div>
+<div class="modal" id="player-change-modal" role="dialog" aria-modal="true" aria-labelledby="player-change-modal-title" hidden>
+    <div class="modal-card">
+        <h2 id="player-change-modal-title">Actualizar fixture</h2>
+        <p id="player-change-description"></p>
+        <div class="choice-actions">
+            <button class="btn btn-primary" type="button" onclick="confirmPlayerChange('future')">
+                Desde esta ronda en adelante
+                <span>Intercambia jugadores y descansos en las rondas futuras.</span>
+            </button>
+            <button class="btn btn-secondary" type="button" onclick="confirmPlayerChange('single')">
+                Solo esta ronda
+                <span>Modifica únicamente los partidos de esta ronda.</span>
+            </button>
+            <button class="btn btn-secondary" type="button" onclick="cancelPlayerChange()">Cancelar</button>
+        </div>
+    </div>
+</div>
 <input type="file" id="file-input" accept=".json" style="display:none">
 
 <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
@@ -435,6 +468,7 @@
     let tournamentName = '';
     let tournamentDate = '';
     let resolveTournamentName = null;
+    let resolvePlayerChange = null;
     const firebaseConfig = {
         apiKey: 'AIzaSyAEWG54OzZ7QMHb6otPJTLwuE8ttbBNnPc',
         authDomain: 'padel-torneo-ec30a.firebaseapp.com',
@@ -987,19 +1021,72 @@
         });
     }
 
-    function updateMatchPlayer(roundIdx, matchIdx, role, newValue) {
+    function askPlayerChange(previousPlayer, selectedPlayer) {
+        const modal = document.getElementById('player-change-modal');
+        document.getElementById('player-change-description').textContent =
+            `${players[selectedPlayer]} reemplaza a ${players[previousPlayer]}. ¿Cómo querés aplicar el cambio?`;
+        modal.hidden = false;
+        return new Promise(resolve => { resolvePlayerChange = resolve; });
+    }
+
+    function closePlayerChangeModal(value) {
+        document.getElementById('player-change-modal').hidden = true;
+        if (resolvePlayerChange) resolvePlayerChange(value);
+        resolvePlayerChange = null;
+    }
+
+    function confirmPlayerChange(scope) {
+        closePlayerChangeModal(scope);
+    }
+
+    function cancelPlayerChange() {
+        closePlayerChangeModal(null);
+    }
+
+    function swapPlayersInRound(round, firstPlayer, secondPlayer) {
+        getRoundPlayerSlots(round).forEach(slot => {
+            if (slot.match[slot.role] === firstPlayer) slot.match[slot.role] = secondPlayer;
+            else if (slot.match[slot.role] === secondPlayer) slot.match[slot.role] = firstPlayer;
+        });
+        normalizeRoundPlayers(round);
+    }
+
+    function applySingleRoundPlayerChange(round, targetMatch, role, previousPlayer, selectedPlayer) {
+        const selectedPlayerSlot = getRoundPlayerSlots(round)
+            .find(slot => (slot.match !== targetMatch || slot.role !== role) && slot.match[slot.role] === selectedPlayer);
+        if (selectedPlayerSlot) selectedPlayerSlot.match[selectedPlayerSlot.role] = previousPlayer;
+        targetMatch[role] = selectedPlayer;
+        normalizeRoundPlayers(round);
+    }
+
+    function hasRecordedScoresFromRound(roundIdx) {
+        return schedule.slice(roundIdx).some(round => round.matches.some(isMatchDone));
+    }
+
+    async function updateMatchPlayer(roundIdx, matchIdx, role, newValue) {
         const round = schedule[roundIdx];
         const selectedPlayer = parseInt(newValue, 10);
         const targetMatch = round.matches[matchIdx];
         const previousPlayer = targetMatch[role];
         if (Number.isNaN(selectedPlayer) || selectedPlayer === previousPlayer) return;
 
-        const selectedPlayerSlot = getRoundPlayerSlots(round)
-            .find(slot => (slot.match !== targetMatch || slot.role !== role) && slot.match[slot.role] === selectedPlayer);
-        if (selectedPlayerSlot) selectedPlayerSlot.match[selectedPlayerSlot.role] = previousPlayer;
-
-        targetMatch[role] = selectedPlayer;
-        normalizeRoundPlayers(round);
+        const scope = await askPlayerChange(previousPlayer, selectedPlayer);
+        if (!scope) {
+            renderRounds();
+            return;
+        }
+        if (scope === 'future') {
+            if (hasRecordedScoresFromRound(roundIdx)) {
+                renderRounds();
+                showToast('No se puede cambiar el resto: ya hay resultados cargados desde esta ronda.');
+                return;
+            }
+            for (let index = roundIdx; index < schedule.length; index++) {
+                swapPlayersInRound(schedule[index], previousPlayer, selectedPlayer);
+            }
+        } else {
+            applySingleRoundPlayerChange(round, targetMatch, role, previousPlayer, selectedPlayer);
+        }
         saveLocal();
         renderRounds();
         calculateStats();
