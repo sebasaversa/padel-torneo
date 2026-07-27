@@ -1,17 +1,31 @@
 # Torneo Americano Pádel
 
-Anotador web para torneo americano de pádel: **9 jugadores**, **2 canchas**, **9 rondas** (cada uno descansa 1 vez), sets a **4 games**.
+Anotador web para torneo americano de pádel: **jugadores configurables (4–16)**, **2 canchas**, sets a **4 games**.
+
+## Versiones
+
+| Tag | Descripción |
+|-----|-------------|
+| `v1-fijo-9-jugadores` | Versión original fija para 9 jugadores |
+| `master` (actual) | Cantidad de jugadores configurable |
+
+Para volver a la versión original:
+```bash
+git checkout v1-fijo-9-jugadores
+```
+
+Para volver a la versión nueva:
+```bash
+git checkout master
+```
 
 ## Esquema de juego
 
-| Ronda | Cancha 1 | Cancha 2 | Descansa |
-|-------|----------|----------|----------|
-| 1 | P0+P7 vs P3+P4 | P1+P6 vs P2+P5 | P8 |
-| 2 | P1+P8 vs P4+P5 | P2+P7 vs P3+P6 | P0 |
-| 3 | P2+P0 vs P5+P6 | P3+P8 vs P4+P7 | P1 |
-| ... | *(rotación cíclica)* | | |
+- **4–7 jugadores:** 1 cancha (4 juegan, el resto descansa)
+- **8 jugadores:** 2 canchas, todos juegan
+- **9+ jugadores:** 2 canchas (8 juegan), el resto descansa rotando
 
-Con 9 rondas, cada jugador juega **8 partidos** con **8 compañeros distintos** y enfrenta la mayoría de combinaciones posibles.
+Con 9 jugadores se usa el fixture cíclico perfecto original. Para otros números, se genera automáticamente.
 
 ## Uso local
 

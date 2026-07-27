@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Anotador de torneo americano de pádel — 9 jugadores, 2 canchas, rotación automática">
+    <meta name="description" content="Anotador de torneo americano de pádel — jugadores configurables, 2 canchas, rotación automática">
     <title>Torneo Americano Pádel</title>
     <style>
         :root {
@@ -95,6 +95,29 @@
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
             gap: 8px;
         }
+        .player-count-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+        .player-count-row label { font-weight: 600; font-size: 0.9rem; }
+        .count-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .count-controls input {
+            width: 56px;
+            padding: 8px;
+            text-align: center;
+            font-weight: bold;
+            border: 2px solid var(--primary);
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        .count-hint { font-size: 0.8rem; color: var(--muted); }
         .players-grid input {
             padding: 10px;
             border: 1px solid var(--border);
@@ -218,7 +241,7 @@
 
 <div class="container">
     <h1>🏆 Torneo Americano Pádel</h1>
-    <p class="subtitle">9 jugadores · 2 canchas · Sets a 4 games · Rotación automática</p>
+    <p class="subtitle" id="subtitle">9 jugadores · 2 canchas · Sets a 4 games · Rotación automática</p>
 
     <div class="info-box">
         💡 <strong>Cómo usar entre todos:</strong> Una persona anota en su celular. Después de cada ronda, tocá <em>Compartir link</em> y mandalo al grupo — al abrirlo, todos ven los mismos resultados.
@@ -238,6 +261,16 @@
 
     <div class="card">
         <h2>1. Jugadores</h2>
+        <div class="player-count-row">
+            <label for="player-count">Cantidad:</label>
+            <div class="count-controls">
+                <button class="btn btn-secondary btn-sm" onclick="changePlayerCount(-1)">−</button>
+                <input type="number" id="player-count" min="4" max="16" value="9"
+                       onchange="setPlayerCount(parseInt(this.value, 10))">
+                <button class="btn btn-secondary btn-sm" onclick="changePlayerCount(1)">+</button>
+            </div>
+            <span class="count-hint" id="count-hint"></span>
+        </div>
         <div class="players-grid" id="players-container"></div>
     </div>
 
@@ -271,50 +304,189 @@
 <input type="file" id="file-input" accept=".json" style="display:none">
 
 <script>
-    const NUM_PLAYERS = 9;
-    const NUM_ROUNDS = 9;
+    const MIN_PLAYERS = 4;
+    const MAX_PLAYERS = 16;
+    const MAX_COURTS = 2;
 
-    let players = Array.from({ length: NUM_PLAYERS }, (_, i) => `Jugador ${i + 1}`);
+    let numPlayers = 9;
+    let players = [];
     let schedule = [];
     let collapsedRounds = {};
 
-    function generateSchedule() {
+    function defaultPlayers(n) {
+        return Array.from({ length: n }, (_, i) => `Jugador ${i + 1}`);
+    }
+
+    function getCourts(n) {
+        return Math.min(MAX_COURTS, Math.floor(n / 4));
+    }
+
+    function getPlayingCount(n) {
+        return getCourts(n) * 4;
+    }
+
+    function getRestCount(n) {
+        return n - getPlayingCount(n);
+    }
+
+    function getNumRounds(n) {
+        const rest = getRestCount(n);
+        if (rest > 0) return n;
+        if (n === 4) return 3;
+        return Math.max(n - 1, 3);
+    }
+
+    function generateSchedule9() {
         schedule = [];
-        for (let i = 0; i < NUM_ROUNDS; i++) {
+        for (let i = 0; i < 9; i++) {
             schedule.push({
                 id: i,
                 matches: [
                     {
                         court: 1,
-                        t1_p1: (0 + i) % NUM_PLAYERS,
-                        t1_p2: (7 + i) % NUM_PLAYERS,
-                        t2_p1: (3 + i) % NUM_PLAYERS,
-                        t2_p2: (4 + i) % NUM_PLAYERS,
-                        score1: '',
-                        score2: ''
+                        t1_p1: (0 + i) % 9, t1_p2: (7 + i) % 9,
+                        t2_p1: (3 + i) % 9, t2_p2: (4 + i) % 9,
+                        score1: '', score2: ''
                     },
                     {
                         court: 2,
-                        t1_p1: (1 + i) % NUM_PLAYERS,
-                        t1_p2: (6 + i) % NUM_PLAYERS,
-                        t2_p1: (2 + i) % NUM_PLAYERS,
-                        t2_p2: (5 + i) % NUM_PLAYERS,
-                        score1: '',
-                        score2: ''
+                        t1_p1: (1 + i) % 9, t1_p2: (6 + i) % 9,
+                        t2_p1: (2 + i) % 9, t2_p2: (5 + i) % 9,
+                        score1: '', score2: ''
                     }
                 ]
             });
         }
     }
 
+    function getActivePlayers(n, playingCount, round) {
+        const active = [];
+        for (let i = 0; i < playingCount; i++) {
+            active.push((round + i) % n);
+        }
+        return active;
+    }
+
+    function pairFour(active, round) {
+        const pairings = [
+            { t1: [0, 1], t2: [2, 3] },
+            { t1: [0, 2], t2: [1, 3] },
+            { t1: [0, 3], t2: [1, 2] }
+        ];
+        const p = pairings[round % pairings.length];
+        return {
+            court: 1,
+            t1_p1: active[p.t1[0]], t1_p2: active[p.t1[1]],
+            t2_p1: active[p.t2[0]], t2_p2: active[p.t2[1]],
+            score1: '', score2: ''
+        };
+    }
+
+    function pairEight(active) {
+        return [
+            {
+                court: 1,
+                t1_p1: active[0], t1_p2: active[7],
+                t2_p1: active[3], t2_p2: active[4],
+                score1: '', score2: ''
+            },
+            {
+                court: 2,
+                t1_p1: active[1], t1_p2: active[6],
+                t2_p1: active[2], t2_p2: active[5],
+                score1: '', score2: ''
+            }
+        ];
+    }
+
+    function generateScheduleGeneral() {
+        const n = numPlayers;
+        const playingCount = getPlayingCount(n);
+        const rounds = getNumRounds(n);
+        schedule = [];
+
+        for (let r = 0; r < rounds; r++) {
+            const active = getActivePlayers(n, playingCount, r);
+            let matches = [];
+
+            if (playingCount >= 8) {
+                matches = pairEight(active);
+            } else if (playingCount >= 4) {
+                matches = [pairFour(active, r)];
+            }
+
+            schedule.push({ id: r, matches });
+        }
+    }
+
+    function generateSchedule() {
+        if (numPlayers === 9) {
+            generateSchedule9();
+        } else {
+            generateScheduleGeneral();
+        }
+    }
+
+    function updateSubtitle() {
+        const courts = getCourts(numPlayers);
+        const rest = getRestCount(numPlayers);
+        const rounds = getNumRounds(numPlayers);
+        let restText = rest === 0 ? 'todos juegan' : `${rest} descansa${rest > 1 ? 'n' : ''} por ronda`;
+        document.getElementById('subtitle').textContent =
+            `${numPlayers} jugadores · ${courts} cancha${courts > 1 ? 's' : ''} · ${rounds} rondas · ${restText} · Sets a 4 games`;
+        document.getElementById('count-hint').textContent =
+            rest > 0
+                ? `${rounds} rondas para rotar el descanso`
+                : `${rounds} rondas de rotación de parejas`;
+    }
+
+    function resizePlayers(newCount) {
+        const old = [...players];
+        players = defaultPlayers(newCount);
+        for (let i = 0; i < Math.min(old.length, newCount); i++) {
+            players[i] = old[i];
+        }
+        numPlayers = newCount;
+        document.getElementById('player-count').value = newCount;
+    }
+
+    function changePlayerCount(delta) {
+        setPlayerCount(numPlayers + delta);
+    }
+
+    function setPlayerCount(newCount) {
+        if (isNaN(newCount)) return;
+        newCount = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, newCount));
+        if (newCount === numPlayers) {
+            document.getElementById('player-count').value = numPlayers;
+            return;
+        }
+
+        const hasScores = schedule.some(r => r.matches.some(m => m.score1 !== '' || m.score2 !== ''));
+        if (hasScores && !confirm(`¿Cambiar a ${newCount} jugadores? Se regenerará el fixture y se pierden los resultados.`)) {
+            document.getElementById('player-count').value = numPlayers;
+            return;
+        }
+
+        resizePlayers(newCount);
+        generateSchedule();
+        collapsedRounds = {};
+        saveLocal();
+        renderAll();
+        showToast(`${newCount} jugadores · fixture actualizado`);
+    }
+
     function getState() {
-        return { players, schedule, collapsedRounds };
+        return { numPlayers, players, schedule, collapsedRounds };
     }
 
     function setState(state) {
+        if (state.numPlayers) numPlayers = state.numPlayers;
+        else if (state.players) numPlayers = state.players.length;
         if (state.players) players = state.players;
         if (state.schedule) schedule = state.schedule;
         if (state.collapsedRounds) collapsedRounds = state.collapsedRounds;
+        document.getElementById('player-count').value = numPlayers;
         renderAll();
     }
 
@@ -407,9 +579,11 @@
 
     function resetAll() {
         if (!confirm('¿Borrar todo (nombres y resultados)?')) return;
-        players = Array.from({ length: NUM_PLAYERS }, (_, i) => `Jugador ${i + 1}`);
+        numPlayers = 9;
+        players = defaultPlayers(numPlayers);
         generateSchedule();
         collapsedRounds = {};
+        document.getElementById('player-count').value = numPlayers;
         localStorage.removeItem('padel-torneo');
         history.replaceState(null, '', location.pathname);
         renderAll();
@@ -465,16 +639,17 @@
         renderRounds();
     }
 
-    function getRestingPlayer(round) {
+    function getRestingPlayers(round) {
         const playing = new Set();
         round.matches.forEach(m => {
             playing.add(m.t1_p1); playing.add(m.t1_p2);
             playing.add(m.t2_p1); playing.add(m.t2_p2);
         });
-        for (let i = 0; i < NUM_PLAYERS; i++) {
-            if (!playing.has(i)) return players[i];
+        const resting = [];
+        for (let i = 0; i < numPlayers; i++) {
+            if (!playing.has(i)) resting.push(players[i]);
         }
-        return '—';
+        return resting;
     }
 
     function isMatchDone(m) {
@@ -498,15 +673,20 @@
         schedule.forEach((round, rIdx) => {
             const done = isRoundDone(round);
             const collapsed = collapsedRounds[rIdx] === true;
-            const rest = getRestingPlayer(round);
+            const resting = getRestingPlayers(round);
+            const restLabel = resting.length === 0
+                ? 'Todos juegan'
+                : resting.length === 1
+                    ? `Descansa: ${resting[0]}`
+                    : `Descansan: ${resting.join(', ')}`;
 
             let html = `<div class="card round-card ${done ? 'round-done' : ''}">
                 <div class="round-header" onclick="toggleRound(${rIdx})">
-                    <h3>Ronda ${rIdx + 1}${done ? '' : ''}</h3>
+                    <h3>Ronda ${rIdx + 1}</h3>
                     <span class="chevron">${collapsed ? '▶ Mostrar' : '▼ Ocultar'}</span>
                 </div>
                 <div class="round-body ${collapsed ? 'collapsed' : ''}">
-                    <div class="rest-badge">💤 Descansa: ${rest}</div>`;
+                    <div class="rest-badge">💤 ${restLabel}</div>`;
 
             round.matches.forEach((m, mIdx) => {
                 const mDone = isMatchDone(m);
@@ -557,12 +737,14 @@
                 const t2 = [m.t2_p1, m.t2_p2];
 
                 t1.forEach(p => {
+                    if (p >= stats.length) return;
                     stats[p].gf += s1;
                     stats[p].gc += s2;
                     if (s1 > s2) stats[p].v += 1;
                     if (s1 < s2) stats[p].d += 1;
                 });
                 t2.forEach(p => {
+                    if (p >= stats.length) return;
                     stats[p].gf += s2;
                     stats[p].gc += s1;
                     if (s2 > s1) stats[p].v += 1;
@@ -603,6 +785,7 @@
     }
 
     function renderAll() {
+        updateSubtitle();
         renderPlayers();
         renderRounds();
         calculateStats();
@@ -610,6 +793,7 @@
     }
 
     // Init
+    players = defaultPlayers(numPlayers);
     generateSchedule();
     if (!loadFromHash()) {
         const saved = loadLocal();
