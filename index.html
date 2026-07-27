@@ -40,6 +40,13 @@
             font-size: 0.9rem;
             margin: 0 0 20px;
         }
+        .tournament-date {
+            text-align: center;
+            color: var(--primary);
+            font-size: 0.82rem;
+            font-weight: 600;
+            margin: 0 0 4px;
+        }
         h2 {
             font-size: 1.1rem;
             margin: 0 0 12px;
@@ -280,7 +287,8 @@
 <body>
 
 <div class="container">
-    <h1>🏆 Torneo Americano Pádel</h1>
+    <h1 id="tournament-title">🏆 Torneo Americano Pádel</h1>
+    <p class="tournament-date" id="tournament-date" hidden></p>
     <p class="subtitle" id="subtitle">9 jugadores · 2 canchas · Sets a 4 games · Rotación automática</p>
 
     <div class="info-box">
@@ -371,6 +379,8 @@
     let players = [];
     let schedule = [];
     let collapsedRounds = {};
+    let tournamentName = '';
+    let tournamentDate = '';
     const firebaseConfig = {
         apiKey: 'AIzaSyAEWG54OzZ7QMHb6otPJTLwuE8ttbBNnPc',
         authDomain: 'padel-torneo-ec30a.firebaseapp.com',
@@ -501,6 +511,39 @@
         }
     }
 
+    function getTodayISODate() {
+        const today = new Date();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        return `${today.getFullYear()}-${month}-${day}`;
+    }
+
+    function formatTournamentDate(date) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+        const [year, month, day] = date.split('-').map(Number);
+        return new Intl.DateTimeFormat('es-AR', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        }).format(new Date(year, month - 1, day));
+    }
+
+    function updateTournamentHeader() {
+        const title = document.getElementById('tournament-title');
+        const date = document.getElementById('tournament-date');
+        if (tournamentId) {
+            const visibleName = tournamentName || 'Torneo compartido';
+            title.textContent = `🏆 ${visibleName}`;
+            date.textContent = tournamentDate
+                ? `Torneo compartido · ${formatTournamentDate(tournamentDate)}`
+                : 'Torneo compartido';
+            date.hidden = false;
+            document.title = `${visibleName} · Torneo Americano Pádel`;
+            return;
+        }
+        title.textContent = '🏆 Torneo Americano Pádel';
+        date.hidden = true;
+        document.title = 'Torneo Americano Pádel';
+    }
+
     function updateSubtitle() {
         const courts = getCourts(numPlayers);
         const rest = getRestCount(numPlayers);
@@ -575,7 +618,7 @@
     }
 
     function getState() {
-        return { numPlayers, gamesPerSet, players, schedule, collapsedRounds };
+        return { numPlayers, gamesPerSet, players, schedule, collapsedRounds, tournamentName, tournamentDate };
     }
 
     function setState(state) {
@@ -585,6 +628,8 @@
         gamesPerSet = Number.isNaN(savedGamesPerSet)
             ? 4
             : Math.max(MIN_GAMES_PER_SET, Math.min(MAX_GAMES_PER_SET, savedGamesPerSet));
+        tournamentName = typeof state.tournamentName === 'string' ? state.tournamentName : '';
+        tournamentDate = typeof state.tournamentDate === 'string' ? state.tournamentDate : '';
         if (state.players) players = state.players;
         if (state.schedule) schedule = state.schedule;
         if (state.collapsedRounds) collapsedRounds = state.collapsedRounds;
@@ -661,14 +706,20 @@
 
     async function createSharedTournament(copyLink = false) {
         if (!tournamentId) {
+            const chosenName = prompt('¿Cómo se llama este torneo?', 'Torneo de Pádel');
+            if (chosenName === null) return;
+
+            tournamentName = chosenName.trim() || 'Torneo de Pádel';
+            tournamentDate = getTodayISODate();
+
             // Un torneo nuevo conserva la configuración, pero siempre empieza sin resultados.
             generateSchedule();
             collapsedRounds = {};
+            const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
+            tournamentId = id;
+            history.replaceState(null, '', `${location.pathname}?torneo=${id}`);
             saveLocal();
             renderAll();
-
-            const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
-            history.replaceState(null, '', `${location.pathname}?torneo=${id}`);
             await connectToTournament(id);
             await saveRemoteNow();
         } else if (!tournamentRef) {
@@ -1005,6 +1056,7 @@
     }
 
     function renderAll() {
+        updateTournamentHeader();
         updateSubtitle();
         renderPlayers();
         renderRounds();
