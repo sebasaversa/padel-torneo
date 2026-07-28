@@ -33,6 +33,7 @@ import {
 import { renderPlayerList } from './ui/components/player-list.js';
 import { renderLeaderboard } from './ui/components/leaderboard.js';
 import { renderRoundCards } from './ui/components/round-card.js';
+import { renderTournamentToolbar } from './ui/components/toolbar.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -121,32 +122,7 @@ import { renderRoundCards } from './ui/components/round-card.js';
     }
 
     function updateTournamentHeader() {
-        const title = document.getElementById('tournament-title');
-        const date = document.getElementById('tournament-date');
-        const createButton = document.getElementById('create-shared-button');
-        const isSharedTournament = Boolean(tournamentId);
-        createButton.disabled = isSharedTournament;
-        createButton.textContent = isSharedTournament
-            ? '☁️ Torneo compartido activo'
-            : '☁️ Crear torneo compartido';
-        createButton.title = isSharedTournament
-            ? 'Ya estás dentro de un torneo compartido'
-            : '';
-
-        if (isSharedTournament) {
-            const visibleName = tournamentState.value.tournamentName || 'Torneo compartido';
-            title.textContent = `🏆 ${visibleName}`;
-            date.textContent = tournamentState.value.tournamentDate
-                ? `Torneo compartido · ${formatTournamentDate(tournamentState.value.tournamentDate)}`
-                : 'Torneo compartido';
-            date.hidden = false;
-            document.title = `${visibleName} · Torneo Americano Pádel`;
-            return;
-        }
-        title.textContent = '🏆 Torneo Americano Pádel';
-        date.hidden = true;
-        setPresenceStatus(0);
-        document.title = 'Torneo Americano Pádel';
+        if (!tournamentId) setPresenceStatus(0);
     }
 
     function updateSubtitle() {
@@ -154,17 +130,7 @@ import { renderRoundCards } from './ui/components/round-card.js';
         const rest = getRestCount(tournamentState.value.numPlayers);
         const rounds = tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers);
         const plannedRounds = getNumRounds(tournamentState.value.numPlayers);
-        let restText = rest === 0 ? 'todos juegan' : `${rest} descansa${rest > 1 ? 'n' : ''} por ronda`;
-        document.getElementById('subtitle').textContent =
-            `${tournamentState.value.numPlayers} jugadores · ${courts} cancha${courts > 1 ? 's' : ''} · ${rounds} rondas · ${restText} · Sets a ${tournamentState.value.gamesPerSet} games`;
-        document.getElementById('count-hint').textContent =
-            `${courts} cancha${courts > 1 ? 's' : ''} · ${restText}`;
-        document.getElementById('round-count').value = rounds;
-        document.getElementById('round-count-hint').textContent =
-            rounds > plannedRounds
-                ? `${rounds - plannedRounds} ronda${rounds - plannedRounds === 1 ? '' : 's'} extra agregada${rounds - plannedRounds === 1 ? '' : 's'}`
-                : 'Cantidad de rondas independiente de los jugadores';
-        document.getElementById('matches-title').textContent = `3. Partidos (a ${tournamentState.value.gamesPerSet} games)`;
+        renderTournamentToolbar({ tournamentId, tournamentName: tournamentState.value.tournamentName, tournamentDate: tournamentState.value.tournamentDate, formattedDate: formatTournamentDate(tournamentState.value.tournamentDate), numPlayers: tournamentState.value.numPlayers, gamesPerSet: tournamentState.value.gamesPerSet, scheduleLength: rounds, courts, rest, plannedRounds });
     }
 
     function resizePlayers(newCount) {
