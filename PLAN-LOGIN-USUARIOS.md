@@ -196,14 +196,14 @@ Commit: `Add tournament admin management and scoped history`.
 
 ### 6. Presencia, espectadores y asignación de jugador
 
-Estado: `[ ]` Pendiente.
+Estado: `[x]` Completada.
 
-- `[ ]` Asociar presencia a `auth.uid` y no sólo a un identificador del dispositivo.
-- `[ ]` Mantener varios dispositivos por persona sin duplicar de forma engañosa la lista de usuarios.
-- `[ ]` Mostrar al admin quiénes están conectados o visualizando, con su rol y jugador si corresponde.
-- `[ ]` Reemplazar el claim actual por una asignación jugador ↔ UID robusta y exclusiva.
-- `[ ]` Permitir entrar explícitamente como espectador.
-- `[ ]` Resolver abandono, reconexión y liberación de jugador de forma segura.
+- `[x]` Asociar presencia a `auth.uid` y no sólo a un identificador del dispositivo.
+- `[x]` Mantener varios dispositivos por persona sin duplicar de forma engañosa la lista de usuarios.
+- `[x]` Mostrar al admin quiénes están conectados o visualizando, con su rol y jugador si corresponde.
+- `[x]` Reemplazar el claim actual por una asignación jugador ↔ UID robusta y exclusiva.
+- `[x]` Permitir entrar explícitamente como espectador.
+- `[x]` Resolver abandono, reconexión y liberación de jugador de forma segura.
 
 Criterio de finalización: el admin ve presencia confiable y un jugador no puede ser reclamado simultáneamente por dos identidades distintas.
 

@@ -27,6 +27,7 @@ import { createAdminUserApi } from './services/admin-user-api.js';
 import { createTournamentMetadataStore } from './services/tournament-metadata-store.js';
 import { createTournamentSync } from './services/tournament-sync.js';
 import { createTournamentIdentity } from './services/identity.js';
+import { formatPresenceRole, summarizePresence } from './services/presence.js';
 import { createActivityLog } from './services/activity.js';
 import {
     createSharedTournamentUrl,
@@ -709,15 +710,22 @@ import { createAppController } from './app/app-controller.js';
         if (status) status.textContent = message;
     }
 
-    function setPresenceStatus(count) {
+    function setPresenceStatus(presences) {
         const status = document.getElementById('presence-status');
         if (!status) return;
         if (!tournamentId) {
             status.hidden = true;
             return;
         }
+        const { devices, people } = summarizePresence(presences);
         status.hidden = false;
-        status.textContent = `👥 ${count} persona${count === 1 ? '' : 's'} conectada${count === 1 ? '' : 's'}`;
+        const peopleLabel = `${people.length} persona${people.length === 1 ? '' : 's'} conectada${people.length === 1 ? '' : 's'}`;
+        const devicesLabel = devices !== people.length ? ` · ${devices} dispositivos` : '';
+        const canSeeDetails = sessionRole === 'admin' || sessionRole === 'superAdmin';
+        const detail = canSeeDetails && people.length
+            ? ` — ${people.map(person => `${person.actorName} (${formatPresenceRole(person.role)})`).join(', ')}`
+            : '';
+        status.textContent = `👥 ${peopleLabel}${devicesLabel}${detail}`;
     }
 
     function getDeviceLabel() {
@@ -785,8 +793,13 @@ import { createAppController } from './app/app-controller.js';
     function getAvailablePlayerIds() {
         return tournamentState.value.players.map((_, id) => id).filter(id => {
             const claim = claimedPlayers[id];
-            return !claim || claim.presenceId === presenceId;
+            return !claim || isOwnClaim(claim);
         });
+    }
+
+    function isOwnClaim(claim) {
+        const authUid = sessionUser?.isAnonymous ? '' : sessionUser?.uid || '';
+        return authUid && claim?.uid ? claim.uid === authUid : claim?.presenceId === presenceId;
     }
 
     function showIdentityChoice() {
@@ -853,6 +866,7 @@ import { createAppController } from './app/app-controller.js';
         actorPlayerId = null;
         saveActorPlayerId(null);
         document.getElementById('identity-modal').hidden = true;
+        tournamentIdentity?.releasePlayer().catch(() => {});
         tournamentIdentity?.updatePresence({ actorName: 'Espectador' });
         updateIdentityStatus();
     }
@@ -869,7 +883,7 @@ import { createAppController } from './app/app-controller.js';
 
     function maybeRequestIdentity() {
         if (!tournamentId || !tournamentRef || !tournamentState.value.players.length || !claimsLoaded || !sharedStateLoaded || identityPromptShown) return;
-        const ownClaim = Object.entries(claimedPlayers).find(([, claim]) => claim?.presenceId === presenceId);
+        const ownClaim = Object.entries(claimedPlayers).find(([, claim]) => isOwnClaim(claim));
         if (ownClaim) {
             actorPlayerId = parseInt(ownClaim[0], 10);
             tournamentIdentity?.restoreClaim(actorPlayerId);
@@ -985,7 +999,9 @@ import { createAppController } from './app/app-controller.js';
                 getPlayerName: id => tournamentState.value.players[id],
                 getDeviceLabel,
                 authUid: sessionUser?.isAnonymous ? '' : sessionUser?.uid || '',
-                onPresenceCount: setPresenceStatus,
+                actorRole: sessionRole || 'spectator',
+                onPresenceCount: () => {},
+                onPresence: setPresenceStatus,
                 onClaims: claims => {
                     claimedPlayers = claims;
                     claimsLoaded = true;
