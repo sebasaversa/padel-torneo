@@ -22,6 +22,7 @@ import { buildTournamentSummaryText } from './features/scoring/summary.js';
 import { createFirebaseClient } from './services/firebase.js';
 import { createTournamentSync } from './services/tournament-sync.js';
 import { createTournamentIdentity } from './services/identity.js';
+import { createActivityLog } from './services/activity.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -54,9 +55,8 @@ import { createTournamentIdentity } from './services/identity.js';
     let tournamentIdentity = null;
     let actorPlayerId = null;
     let pendingActorPlayerId = null;
-    let historyUnsubscribe = null;
+    let activityLog = null;
     let claimedPlayers = {};
-    let historyEntries = [];
     let identityPromptShown = false;
     let claimsLoaded = false;
     let sharedStateLoaded = false;
@@ -507,13 +507,8 @@ import { createTournamentIdentity } from './services/identity.js';
     }
 
     function logActivity(message) {
-        if (!tournamentRef || tournamentSync?.isApplyingRemoteState()) return;
-        tournamentRef.child('history').push({
-            message,
-            actor: getActorName(),
-            device: getDeviceLabel(),
-            createdAt: firebaseClient.serverTimestamp()
-        }).catch(() => {});
+        if (!activityLog || tournamentSync?.isApplyingRemoteState()) return;
+        activityLog.log(message).catch(() => {});
     }
 
     function formatActivityTime(timestamp) {
@@ -523,6 +518,7 @@ import { createTournamentIdentity } from './services/identity.js';
 
     function renderActivity() {
         const list = document.getElementById('activity-list');
+        const historyEntries = activityLog?.getEntries() || [];
         if (!historyEntries.length) {
             list.innerHTML = '<p>Todavía no hay cambios registrados.</p>';
             return;
@@ -558,11 +554,10 @@ import { createTournamentIdentity } from './services/identity.js';
             await ensureFirebase();
             if (tournamentSync) tournamentSync.disconnect();
             if (tournamentIdentity) tournamentIdentity.disconnect();
-            if (historyUnsubscribe) historyUnsubscribe();
+            if (activityLog) activityLog.disconnect();
             tournamentId = id;
             actorPlayerId = null;
             claimedPlayers = {};
-            historyEntries = [];
             identityPromptShown = false;
             claimsLoaded = false;
             sharedStateLoaded = false;
@@ -603,12 +598,16 @@ import { createTournamentIdentity } from './services/identity.js';
                     maybeRequestIdentity();
                 }
             });
-            const historyRef = tournamentRef.child('history').limitToLast(50);
-            const historyListener = historyRef.on('value', snapshot => {
-                historyEntries = Object.values(snapshot.val() || {}).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+            activityLog = createActivityLog({
+                tournamentRef,
+                serverTimestamp: () => firebaseClient.serverTimestamp(),
+                getActorName,
+                getDeviceLabel,
+                onEntries: () => {
                 if (!document.getElementById('activity-modal').hidden) renderActivity();
+                }
             });
-            historyUnsubscribe = () => historyRef.off('value', historyListener);
+            activityLog.connect();
             await tournamentIdentity.connect({ actorName: getActorName(), actorPlayerId });
         } catch (error) { /* status set in ensureFirebase */ }
     }

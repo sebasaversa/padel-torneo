@@ -151,7 +151,7 @@ Estado: `[~]` En curso.
 - `[x]` Encapsular inicialización y autenticación anónima de Firebase.
 - `[x]` Encapsular sincronización del estado compartido.
 - `[x]` Encapsular presencia y claims de identidad.
-- Encapsular historial de actividad.
+- `[x]` Encapsular historial de actividad.
 - Encapsular links compartidos y exportación/importación.
 - Mantener sin cambios las rutas existentes de Firebase.
 
