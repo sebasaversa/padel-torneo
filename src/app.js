@@ -21,6 +21,7 @@ import { getBestStreak, getLeaderboardStats, getProgress } from './features/scor
 import { buildTournamentSummaryText } from './features/scoring/summary.js';
 import { createFirebaseClient } from './services/firebase.js';
 import { createTournamentSync } from './services/tournament-sync.js';
+import { createTournamentIdentity } from './services/identity.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -50,12 +51,9 @@ import { createTournamentSync } from './services/tournament-sync.js';
     let realtimeDb = null;
     let tournamentRef = null;
     let tournamentSync = null;
-    let presenceRef = null;
-    let presenceUnsubscribe = null;
+    let tournamentIdentity = null;
     let actorPlayerId = null;
     let pendingActorPlayerId = null;
-    let actorClaimRef = null;
-    let claimsUnsubscribe = null;
     let historyUnsubscribe = null;
     let claimedPlayers = {};
     let historyEntries = [];
@@ -467,27 +465,17 @@ import { createTournamentSync } from './services/tournament-sync.js';
         actorPlayerId = null;
         saveActorPlayerId(null);
         document.getElementById('identity-modal').hidden = true;
-        if (presenceRef) presenceRef.update({ actorName: 'Espectador', device: getDeviceLabel() });
+        tournamentIdentity?.updatePresence({ actorName: 'Espectador' });
         updateIdentityStatus();
     }
 
     async function claimPlayer(playerId) {
         if (!tournamentRef || !Number.isInteger(playerId)) return false;
-        const claimRef = tournamentRef.child(`claims/${playerId}`);
-        const result = await claimRef.transaction(current => {
-            if (!current || current.presenceId === presenceId) {
-                return { presenceId, actorName: tournamentState.value.players[playerId], device: getDeviceLabel() };
-            }
-            return;
-        });
-        if (!result.committed || result.snapshot.val()?.presenceId !== presenceId) return false;
-        if (actorClaimRef && actorClaimRef !== claimRef) actorClaimRef.remove().catch(() => {});
-        actorClaimRef = claimRef;
-        await actorClaimRef.onDisconnect().remove();
+        const claimed = await tournamentIdentity?.claimPlayer(playerId);
+        if (!claimed) return false;
         actorPlayerId = playerId;
         saveActorPlayerId(playerId);
         updateIdentityStatus();
-        if (presenceRef) await presenceRef.update({ actorPlayerId: playerId, actorName: getActorName(), device: getDeviceLabel() });
         return true;
     }
 
@@ -496,10 +484,9 @@ import { createTournamentSync } from './services/tournament-sync.js';
         const ownClaim = Object.entries(claimedPlayers).find(([, claim]) => claim?.presenceId === presenceId);
         if (ownClaim) {
             actorPlayerId = parseInt(ownClaim[0], 10);
-            actorClaimRef = tournamentRef.child(`claims/${actorPlayerId}`);
-            actorClaimRef.onDisconnect().remove();
+            tournamentIdentity?.restoreClaim(actorPlayerId);
             saveActorPlayerId(actorPlayerId);
-            if (presenceRef) presenceRef.update({ actorPlayerId, actorName: getActorName(), device: getDeviceLabel() });
+            tournamentIdentity?.updatePresence({ actorPlayerId, actorName: getActorName() });
             identityPromptShown = true;
             updateIdentityStatus();
             return;
@@ -570,14 +557,10 @@ import { createTournamentSync } from './services/tournament-sync.js';
         try {
             await ensureFirebase();
             if (tournamentSync) tournamentSync.disconnect();
-            if (presenceUnsubscribe) presenceUnsubscribe();
-            if (claimsUnsubscribe) claimsUnsubscribe();
+            if (tournamentIdentity) tournamentIdentity.disconnect();
             if (historyUnsubscribe) historyUnsubscribe();
-            if (presenceRef) presenceRef.remove().catch(() => {});
-            if (actorClaimRef) actorClaimRef.remove().catch(() => {});
             tournamentId = id;
             actorPlayerId = null;
-            actorClaimRef = null;
             claimedPlayers = {};
             historyEntries = [];
             identityPromptShown = false;
@@ -606,37 +589,28 @@ import { createTournamentSync } from './services/tournament-sync.js';
                 }
             });
             tournamentRef = tournamentSync.connect(id);
-            const claimsRef = tournamentRef.child('claims');
-            const claimsListener = claimsRef.on('value', snapshot => {
-                claimedPlayers = snapshot.val() || {};
-                claimsLoaded = true;
-                refreshIdentityChoiceIfNeeded();
-                maybeRequestIdentity();
+            tournamentIdentity = createTournamentIdentity({
+                tournamentRef,
+                presenceId,
+                serverTimestamp: () => firebaseClient.serverTimestamp(),
+                getPlayerName: id => tournamentState.value.players[id],
+                getDeviceLabel,
+                onPresenceCount: setPresenceStatus,
+                onClaims: claims => {
+                    claimedPlayers = claims;
+                    claimsLoaded = true;
+                    refreshIdentityChoiceIfNeeded();
+                    maybeRequestIdentity();
+                }
             });
-            claimsUnsubscribe = () => claimsRef.off('value', claimsListener);
             const historyRef = tournamentRef.child('history').limitToLast(50);
             const historyListener = historyRef.on('value', snapshot => {
                 historyEntries = Object.values(snapshot.val() || {}).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
                 if (!document.getElementById('activity-modal').hidden) renderActivity();
             });
             historyUnsubscribe = () => historyRef.off('value', historyListener);
-            await connectPresence();
+            await tournamentIdentity.connect({ actorName: getActorName(), actorPlayerId });
         } catch (error) { /* status set in ensureFirebase */ }
-    }
-
-    async function connectPresence() {
-        presenceRef = tournamentRef.child(`presence/${presenceId}`);
-        const presenceListRef = tournamentRef.child('presence');
-        const listener = presenceListRef.on('value', snapshot => {
-            setPresenceStatus(snapshot.numChildren());
-        });
-        presenceUnsubscribe = () => presenceListRef.off('value', listener);
-        await presenceRef.onDisconnect().remove();
-        await presenceRef.set({
-            connectedAt: firebaseClient.serverTimestamp(),
-            actorName: getActorName(),
-            device: getDeviceLabel()
-        });
     }
 
     function queueRemoteSave() {
