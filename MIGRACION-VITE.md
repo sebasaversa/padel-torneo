@@ -2,6 +2,8 @@
 
 Documento de trabajo para migrar el anotador de pádel desde un único `index.html` hacia una aplicación modular con Vite.
 
+Runtime de desarrollo definido para todo el proyecto: **Node.js 22 LTS**.
+
 ## Objetivo
 
 Mejorar la mantenibilidad y la eficiencia del desarrollo sin cambiar:
@@ -45,13 +47,19 @@ Estado: `[x]` Completa.
 - `[x]` Instalar Vite y las dependencias necesarias.
 - `[x]` Agregar scripts `dev`, `build` y `preview`.
 - `[x]` Crear `vite.config.js` con `base: './'` para GitHub Pages.
-- `[x]` Fijar Node 22 LTS mediante `.nvmrc` y `engines`.
+- `[x]` Fijar Node 22 LTS mediante `.nvmrc` y `engines` (`>=22.12.0 <23`).
 - `[x]` Mantener inicialmente Firebase cargado de forma compatible con la versión actual.
 - `[x]` Verificar que la aplicación pueda generar una build de producción.
 
 Criterio de finalización: la build de Vite termina correctamente y produce una carpeta `dist/`.
 
-Nota: el entorno tiene disponible Node `22.14.0`; la build fue validada con ese runtime.
+Nota: el entorno tiene disponible Node `22.14.0`; la build fue validada con ese runtime. Para activar la versión fijada localmente:
+
+```bash
+nvm use
+npm install
+npm run dev
+```
 
 ### 2. Separar HTML y estilos
 
