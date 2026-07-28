@@ -10,6 +10,7 @@ import {
     serializeUserRecord
 } from './admin-users.js';
 import { getSuperAdminAuthorization, isAdminAccount } from './authorization.js';
+import { buildTournamentDeletion, requireTournamentId } from './tournament-admin.js';
 import { buildSuperAdminProfile, isConfiguredSuperAdmin } from './super-admin.js';
 
 if (!getApps().length) initializeApp();
@@ -140,4 +141,34 @@ export const generateAdminPasswordResetLink = onCall(async request => {
     const link = await getAuth().generatePasswordResetLink(user.email);
     await logAdminActivity(auth, 'generatePasswordResetLink', uid, { email: user.email || '' });
     return { email: user.email, link };
+});
+
+export const setTournamentAdmin = onCall(async request => {
+    const auth = requireSuperAdmin(request);
+    let tournamentId;
+    try { tournamentId = requireTournamentId(request.data?.tournamentId); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
+    const uid = typeof request.data?.uid === 'string' ? request.data.uid : '';
+    const enabled = request.data?.enabled === true;
+    if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
+    const user = await getAuth().getUser(uid);
+    if (!isAdminAccount(user)) throw new HttpsError('permission-denied', 'Sólo se pueden asignar cuentas admin.');
+    const ref = getDatabase().ref(`tournaments/${tournamentId}/metadata`);
+    await ref.transaction(current => {
+        const admins = { ...(current?.admins || {}) };
+        if (enabled) admins[uid] = true; else delete admins[uid];
+        return { ...(current || {}), admins, updatedAt: ServerValue.TIMESTAMP };
+    });
+    await logAdminActivity(auth, enabled ? 'assignTournamentAdmin' : 'removeTournamentAdmin', uid, { tournamentId });
+    return { enabled };
+});
+
+export const setTournamentDeleted = onCall(async request => {
+    const auth = requireSuperAdmin(request);
+    let tournamentId;
+    try { tournamentId = requireTournamentId(request.data?.tournamentId); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
+    const deleted = request.data?.deleted === true;
+    const ref = getDatabase().ref(`tournaments/${tournamentId}/metadata`);
+    await ref.transaction(current => buildTournamentDeletion(current, auth.uid, ServerValue.TIMESTAMP, deleted));
+    await logAdminActivity(auth, deleted ? 'deleteTournament' : 'restoreTournament', tournamentId);
+    return { deleted };
 });
