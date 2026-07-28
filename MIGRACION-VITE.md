@@ -105,7 +105,7 @@ Estado: `[~]` En curso.
 
 - `[x]` Mover la generación automática de rondas y parejas.
 - `[x]` Mover la lógica de cantidad de jugadores, canchas y descansos.
-- Mover el agregado y eliminación independiente de rondas.
+- `[x]` Mover el agregado y eliminación independiente de rondas.
 - Mantener los reemplazos de jugadores por ronda o hacia el futuro.
 - Agregar tests para 4–16 jugadores y para rondas extra.
 
@@ -119,7 +119,7 @@ src/features/fixture/player-swaps.js
 
 Criterio de finalización: el fixture generado por la versión modular coincide con el actual para los mismos datos.
 
-Progreso actual: `src/features/fixture/generator.js` contiene la generación de rondas, descansos, canchas y parejas para todas las cantidades actuales de jugadores. `app.js` conserva sólo un adaptador para actualizar su estado; los controles de rondas y los reemplazos se extraerán en los próximos pasos.
+Progreso actual: `src/features/fixture/generator.js` contiene la generación de rondas, descansos, canchas y parejas para todas las cantidades actuales de jugadores. `src/features/fixture/rounds.js` concentra el agregado, eliminación y validación de rondas con resultados. Queda extraer los reemplazos de jugadores y ampliar la cobertura de pruebas.
 
 ### 5. Extraer resultados y estadísticas
 

@@ -9,6 +9,7 @@ import {
     getPlayingCount,
     getRestCount
 } from './features/fixture/generator.js';
+import { hasResults, resizeRounds } from './features/fixture/rounds.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -230,7 +231,7 @@ import {
         }
         if (newCount < currentCount) {
             const roundsToRemove = tournamentState.value.schedule.slice(newCount);
-            const hasRecordedResults = roundsToRemove.some(round => round.matches.some(isMatchDone));
+            const hasRecordedResults = hasResults(roundsToRemove, isMatchDone);
             if (hasRecordedResults) {
                 document.getElementById('round-count').value = currentCount;
                 showToast('No se pueden quitar rondas que ya tienen resultados cargados.');
@@ -243,16 +244,14 @@ import {
         }
 
         rememberStateForUndo();
-        if (newCount > currentCount) {
-            for (let roundIndex = currentCount; roundIndex < newCount; roundIndex++) {
-                tournamentState.value.schedule.push(createAutomaticRound(roundIndex));
-                tournamentState.value.collapsedRounds[roundIndex] = false;
-            }
-        } else {
-            tournamentState.value.schedule = tournamentState.value.schedule.slice(0, newCount);
-            tournamentState.value.collapsedRounds = Object.fromEntries(Object.entries(tournamentState.value.collapsedRounds)
-                .filter(([index]) => parseInt(index, 10) < newCount));
-        }
+        const resized = resizeRounds({
+            schedule: tournamentState.value.schedule,
+            collapsedRounds: tournamentState.value.collapsedRounds,
+            targetCount: newCount,
+            createRound: createAutomaticRound
+        });
+        tournamentState.value.schedule = resized.schedule;
+        tournamentState.value.collapsedRounds = resized.collapsedRounds;
         saveLocal();
         logActivity(`cambió la cantidad de rondas a ${newCount}`);
         renderAll();
