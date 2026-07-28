@@ -34,6 +34,7 @@ import { renderPlayerList } from './ui/components/player-list.js';
 import { renderLeaderboard } from './ui/components/leaderboard.js';
 import { renderRoundCards } from './ui/components/round-card.js';
 import { renderTournamentToolbar } from './ui/components/toolbar.js';
+import { renderSummaryModal, setModalOpen } from './ui/components/modal.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -915,18 +916,12 @@ import { renderTournamentToolbar } from './ui/components/toolbar.js';
         const positions = stats.slice(0, 3).map((player, index) =>
             `<li>${['🥇', '🥈', '🥉'][index]} <strong>${escapeHTML(player.name)}</strong> · ${player.v}V, ${player.d}D, Dif ${player.dif >= 0 ? '+' : ''}${player.dif}</li>`
         ).join('');
-        document.getElementById('summary-content').innerHTML = `
-            <div class="summary-highlight">🏆 MVP actual: ${escapeHTML(leader.name)} · ${leader.v} victorias · Dif ${leader.dif >= 0 ? '+' : ''}${leader.dif}</div>
-            <p>${progress.completed} de ${progress.total} partidos anotados.</p>
-            <h3>Posiciones</h3>
-            <ol class="summary-list">${positions}</ol>
-            <h3>Racha</h3>
-            <p>${streak.longest ? `🔥 ${escapeHTML(streak.players.join(', '))} lleva la mejor racha: ${streak.longest} victoria${streak.longest > 1 ? 's' : ''}.` : '🔥 Cargá resultados para calcular la mejor racha.'}</p>`;
-        document.getElementById('summary-modal').hidden = false;
+        renderSummaryModal(document.getElementById('summary-content'), { leader, positions, streak, progress, escapeHTML });
+        setModalOpen('summary-modal', true);
     }
 
     function closeSummaryModal() {
-        document.getElementById('summary-modal').hidden = true;
+        setModalOpen('summary-modal', false);
     }
 
     function copyTournamentSummary() {
