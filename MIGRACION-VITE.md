@@ -153,7 +153,7 @@ Estado: `[x]` Completa.
 - `[x]` Encapsular presencia y claims de identidad.
 - `[x]` Encapsular historial de actividad.
 - `[x]` Encapsular links compartidos y exportación/importación.
-- Mantener sin cambios las rutas existentes de Firebase.
+- `[x]` Mantener sin cambios las rutas existentes de Firebase.
 
 Estructura prevista:
 
