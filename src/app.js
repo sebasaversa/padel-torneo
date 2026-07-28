@@ -1,4 +1,4 @@
-import { createStateStore } from './state/store.js';
+import { createStateStore, createTournamentState } from './state/store.js';
 import { createDefaultState, normalizeState } from './state/model.js';
 import { createLocalStorageStore } from './services/local-storage.js';
 import {
@@ -19,13 +19,7 @@ import {
     const MAX_ROUNDS = 50;
 
     const initialState = createDefaultState();
-    let numPlayers = initialState.numPlayers;
-    let gamesPerSet = initialState.gamesPerSet;
-    let players = initialState.players;
-    let schedule = initialState.schedule;
-    let collapsedRounds = initialState.collapsedRounds;
-    let tournamentName = initialState.tournamentName;
-    let tournamentDate = initialState.tournamentDate;
+    const tournamentState = createTournamentState(initialState);
     let resolveTournamentName = null;
     let resolvePlayerChange = null;
     const MAX_UNDO_STEPS = 20;
@@ -78,11 +72,11 @@ import {
     }
 
     function createAutomaticRound(roundIndex) {
-        return createFixtureRound(numPlayers, roundIndex, MAX_COURTS);
+        return createFixtureRound(tournamentState.value.numPlayers, roundIndex, MAX_COURTS);
     }
 
-    function generateSchedule(roundCount = getNumRounds(numPlayers)) {
-        schedule = buildSchedule(numPlayers, roundCount, {
+    function generateSchedule(roundCount = getNumRounds(tournamentState.value.numPlayers)) {
+        tournamentState.value.schedule = buildSchedule(tournamentState.value.numPlayers, roundCount, {
             minRounds: MIN_ROUNDS,
             maxRounds: MAX_ROUNDS,
             maxCourts: MAX_COURTS
@@ -90,7 +84,7 @@ import {
     }
 
     function addRound() {
-        setRoundCount(schedule.length + 1);
+        setRoundCount(tournamentState.value.schedule.length + 1);
     }
 
     function getTodayISODate() {
@@ -122,10 +116,10 @@ import {
             : '';
 
         if (isSharedTournament) {
-            const visibleName = tournamentName || 'Torneo compartido';
+            const visibleName = tournamentState.value.tournamentName || 'Torneo compartido';
             title.textContent = `🏆 ${visibleName}`;
-            date.textContent = tournamentDate
-                ? `Torneo compartido · ${formatTournamentDate(tournamentDate)}`
+            date.textContent = tournamentState.value.tournamentDate
+                ? `Torneo compartido · ${formatTournamentDate(tournamentState.value.tournamentDate)}`
                 : 'Torneo compartido';
             date.hidden = false;
             document.title = `${visibleName} · Torneo Americano Pádel`;
@@ -138,13 +132,13 @@ import {
     }
 
     function updateSubtitle() {
-        const courts = getCourts(numPlayers);
-        const rest = getRestCount(numPlayers);
-        const rounds = schedule.length || getNumRounds(numPlayers);
-        const plannedRounds = getNumRounds(numPlayers);
+        const courts = getCourts(tournamentState.value.numPlayers);
+        const rest = getRestCount(tournamentState.value.numPlayers);
+        const rounds = tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers);
+        const plannedRounds = getNumRounds(tournamentState.value.numPlayers);
         let restText = rest === 0 ? 'todos juegan' : `${rest} descansa${rest > 1 ? 'n' : ''} por ronda`;
         document.getElementById('subtitle').textContent =
-            `${numPlayers} jugadores · ${courts} cancha${courts > 1 ? 's' : ''} · ${rounds} rondas · ${restText} · Sets a ${gamesPerSet} games`;
+            `${tournamentState.value.numPlayers} jugadores · ${courts} cancha${courts > 1 ? 's' : ''} · ${rounds} rondas · ${restText} · Sets a ${tournamentState.value.gamesPerSet} games`;
         document.getElementById('count-hint').textContent =
             `${courts} cancha${courts > 1 ? 's' : ''} · ${restText}`;
         document.getElementById('round-count').value = rounds;
@@ -152,90 +146,90 @@ import {
             rounds > plannedRounds
                 ? `${rounds - plannedRounds} ronda${rounds - plannedRounds === 1 ? '' : 's'} extra agregada${rounds - plannedRounds === 1 ? '' : 's'}`
                 : 'Cantidad de rondas independiente de los jugadores';
-        document.getElementById('matches-title').textContent = `3. Partidos (a ${gamesPerSet} games)`;
+        document.getElementById('matches-title').textContent = `3. Partidos (a ${tournamentState.value.gamesPerSet} games)`;
     }
 
     function resizePlayers(newCount) {
-        const old = [...players];
-        players = defaultPlayers(newCount);
+        const old = [...tournamentState.value.players];
+        tournamentState.value.players = defaultPlayers(newCount);
         for (let i = 0; i < Math.min(old.length, newCount); i++) {
-            players[i] = old[i];
+            tournamentState.value.players[i] = old[i];
         }
-        numPlayers = newCount;
+        tournamentState.value.numPlayers = newCount;
         document.getElementById('player-count').value = newCount;
     }
 
     function changePlayerCount(delta) {
-        setPlayerCount(numPlayers + delta);
+        setPlayerCount(tournamentState.value.numPlayers + delta);
     }
 
     function changeRoundCount(delta) {
-        setRoundCount(schedule.length + delta);
+        setRoundCount(tournamentState.value.schedule.length + delta);
     }
 
     function changeGamesPerSet(delta) {
-        setGamesPerSet(gamesPerSet + delta);
+        setGamesPerSet(tournamentState.value.gamesPerSet + delta);
     }
 
     function setGamesPerSet(newTarget) {
         if (isNaN(newTarget)) {
-            document.getElementById('games-per-set').value = gamesPerSet;
+            document.getElementById('games-per-set').value = tournamentState.value.gamesPerSet;
             return;
         }
         newTarget = Math.max(MIN_GAMES_PER_SET, Math.min(MAX_GAMES_PER_SET, newTarget));
-        if (newTarget === gamesPerSet) {
-            document.getElementById('games-per-set').value = gamesPerSet;
+        if (newTarget === tournamentState.value.gamesPerSet) {
+            document.getElementById('games-per-set').value = tournamentState.value.gamesPerSet;
             return;
         }
 
         rememberStateForUndo();
-        gamesPerSet = newTarget;
-        document.getElementById('games-per-set').value = gamesPerSet;
+        tournamentState.value.gamesPerSet = newTarget;
+        document.getElementById('games-per-set').value = tournamentState.value.gamesPerSet;
         updateSubtitle();
         saveLocal();
-        logActivity(`cambió el objetivo a ${gamesPerSet} games`);
+        logActivity(`cambió el objetivo a ${tournamentState.value.gamesPerSet} games`);
         renderRounds();
-        showToast(`Sets a ${gamesPerSet} games`);
+        showToast(`Sets a ${tournamentState.value.gamesPerSet} games`);
     }
 
     function setPlayerCount(newCount) {
         if (isNaN(newCount)) return;
         newCount = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, newCount));
-        if (newCount === numPlayers) {
-            document.getElementById('player-count').value = numPlayers;
+        if (newCount === tournamentState.value.numPlayers) {
+            document.getElementById('player-count').value = tournamentState.value.numPlayers;
             return;
         }
 
-        const hasScores = schedule.some(r => r.matches.some(m => m.score1 !== '' || m.score2 !== ''));
+        const hasScores = tournamentState.value.schedule.some(r => r.matches.some(m => m.score1 !== '' || m.score2 !== ''));
         if (hasScores && !confirm(`¿Cambiar a ${newCount} jugadores? Se regenerará el fixture y se pierden los resultados.`)) {
-            document.getElementById('player-count').value = numPlayers;
+            document.getElementById('player-count').value = tournamentState.value.numPlayers;
             return;
         }
 
         rememberStateForUndo();
-        const currentRoundCount = schedule.length || getNumRounds(numPlayers);
+        const currentRoundCount = tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers);
         resizePlayers(newCount);
         generateSchedule(currentRoundCount);
-        collapsedRounds = {};
+        tournamentState.value.collapsedRounds = {};
         saveLocal();
-        logActivity(`cambió la cantidad de jugadores a ${numPlayers}`);
+        logActivity(`cambió la cantidad de jugadores a ${tournamentState.value.numPlayers}`);
         renderAll();
         showToast(`${newCount} jugadores · fixture actualizado`);
     }
 
     function setRoundCount(newCount) {
         if (Number.isNaN(newCount)) {
-            document.getElementById('round-count').value = schedule.length;
+            document.getElementById('round-count').value = tournamentState.value.schedule.length;
             return;
         }
         newCount = Math.max(MIN_ROUNDS, Math.min(MAX_ROUNDS, newCount));
-        const currentCount = schedule.length;
+        const currentCount = tournamentState.value.schedule.length;
         if (newCount === currentCount) {
             document.getElementById('round-count').value = currentCount;
             return;
         }
         if (newCount < currentCount) {
-            const roundsToRemove = schedule.slice(newCount);
+            const roundsToRemove = tournamentState.value.schedule.slice(newCount);
             const hasRecordedResults = roundsToRemove.some(round => round.matches.some(isMatchDone));
             if (hasRecordedResults) {
                 document.getElementById('round-count').value = currentCount;
@@ -251,12 +245,12 @@ import {
         rememberStateForUndo();
         if (newCount > currentCount) {
             for (let roundIndex = currentCount; roundIndex < newCount; roundIndex++) {
-                schedule.push(createAutomaticRound(roundIndex));
-                collapsedRounds[roundIndex] = false;
+                tournamentState.value.schedule.push(createAutomaticRound(roundIndex));
+                tournamentState.value.collapsedRounds[roundIndex] = false;
             }
         } else {
-            schedule = schedule.slice(0, newCount);
-            collapsedRounds = Object.fromEntries(Object.entries(collapsedRounds)
+            tournamentState.value.schedule = tournamentState.value.schedule.slice(0, newCount);
+            tournamentState.value.collapsedRounds = Object.fromEntries(Object.entries(tournamentState.value.collapsedRounds)
                 .filter(([index]) => parseInt(index, 10) < newCount));
         }
         saveLocal();
@@ -268,7 +262,7 @@ import {
     }
 
     function getState() {
-        return { numPlayers, gamesPerSet, players, schedule, collapsedRounds, tournamentName, tournamentDate };
+        return tournamentState.snapshot();
     }
 
     const stateStore = createStateStore({
@@ -305,15 +299,9 @@ import {
             minGamesPerSet: MIN_GAMES_PER_SET,
             maxGamesPerSet: MAX_GAMES_PER_SET
         });
-        numPlayers = normalized.numPlayers;
-        gamesPerSet = normalized.gamesPerSet;
-        players = normalized.players;
-        schedule = normalized.schedule;
-        collapsedRounds = normalized.collapsedRounds;
-        tournamentName = normalized.tournamentName;
-        tournamentDate = normalized.tournamentDate;
-        document.getElementById('player-count').value = numPlayers;
-        document.getElementById('games-per-set').value = gamesPerSet;
+        tournamentState.replace(normalized);
+        document.getElementById('player-count').value = tournamentState.value.numPlayers;
+        document.getElementById('games-per-set').value = tournamentState.value.gamesPerSet;
         renderAll();
     }
 
@@ -354,8 +342,8 @@ import {
     }
 
     function getActorName() {
-        return Number.isInteger(actorPlayerId) && players[actorPlayerId]
-            ? players[actorPlayerId]
+        return Number.isInteger(actorPlayerId) && tournamentState.value.players[actorPlayerId]
+            ? tournamentState.value.players[actorPlayerId]
             : 'Espectador';
     }
 
@@ -371,8 +359,8 @@ import {
             return;
         }
         status.hidden = false;
-        status.textContent = Number.isInteger(actorPlayerId) && players[actorPlayerId]
-            ? `👤 Sos: ${players[actorPlayerId]}`
+        status.textContent = Number.isInteger(actorPlayerId) && tournamentState.value.players[actorPlayerId]
+            ? `👤 Sos: ${tournamentState.value.players[actorPlayerId]}`
             : '👤 Estás como espectador';
     }
 
@@ -401,7 +389,7 @@ import {
     }
 
     function getAvailablePlayerIds() {
-        return players.map((_, id) => id).filter(id => {
+        return tournamentState.value.players.map((_, id) => id).filter(id => {
             const claim = claimedPlayers[id];
             return !claim || claim.presenceId === presenceId;
         });
@@ -417,7 +405,7 @@ import {
         document.getElementById('identity-confirm-button').disabled = false;
         document.getElementById('identity-choice-step').hidden = false;
         document.getElementById('identity-confirm-step').hidden = true;
-        select.innerHTML = available.map(id => `<option value="${id}">${escapeHTML(players[id])}</option>`).join('');
+        select.innerHTML = available.map(id => `<option value="${id}">${escapeHTML(tournamentState.value.players[id])}</option>`).join('');
         continueButton.disabled = available.length === 0;
         spectatorButton.hidden = available.length > 0;
         document.getElementById('identity-choice-description').textContent = available.length
@@ -438,7 +426,7 @@ import {
         document.getElementById('identity-choice-step').hidden = true;
         document.getElementById('identity-confirm-step').hidden = false;
         document.getElementById('identity-confirm-description').textContent =
-            `¿Confirmás que sos ${players[selected]}? Tus cambios se registrarán como “${players[selected]} · ${getDeviceLabel()}”.`;
+            `¿Confirmás que sos ${tournamentState.value.players[selected]}? Tus cambios se registrarán como “${tournamentState.value.players[selected]} · ${getDeviceLabel()}”.`;
     }
 
     async function confirmIdentitySelection() {
@@ -480,7 +468,7 @@ import {
         const claimRef = tournamentRef.child(`claims/${playerId}`);
         const result = await claimRef.transaction(current => {
             if (!current || current.presenceId === presenceId) {
-                return { presenceId, actorName: players[playerId], device: getDeviceLabel() };
+                return { presenceId, actorName: tournamentState.value.players[playerId], device: getDeviceLabel() };
             }
             return;
         });
@@ -496,7 +484,7 @@ import {
     }
 
     function maybeRequestIdentity() {
-        if (!tournamentId || !tournamentRef || !players.length || !claimsLoaded || !sharedStateLoaded || identityPromptShown) return;
+        if (!tournamentId || !tournamentRef || !tournamentState.value.players.length || !claimsLoaded || !sharedStateLoaded || identityPromptShown) return;
         const ownClaim = Object.entries(claimedPlayers).find(([, claim]) => claim?.presenceId === presenceId);
         if (ownClaim) {
             actorPlayerId = parseInt(ownClaim[0], 10);
@@ -696,12 +684,12 @@ import {
             const chosenName = await askTournamentName();
             if (chosenName === null) return;
 
-            tournamentName = chosenName.trim() || 'Torneo de Pádel';
-            tournamentDate = getTodayISODate();
+            tournamentState.value.tournamentName = chosenName.trim() || 'Torneo de Pádel';
+            tournamentState.value.tournamentDate = getTodayISODate();
 
             // Un torneo nuevo conserva la configuración, pero siempre empieza sin resultados.
-            generateSchedule(schedule.length || getNumRounds(numPlayers));
-            collapsedRounds = {};
+            generateSchedule(tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers));
+            tournamentState.value.collapsedRounds = {};
             const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
             tournamentId = id;
             history.replaceState(null, '', `${location.pathname}?torneo=${id}`);
@@ -802,10 +790,10 @@ import {
     function resetSchedule() {
         if (!confirm('¿Regenerar el fixture? Se pierden los resultados pero se mantienen los nombres.')) return;
         rememberStateForUndo();
-        const savedPlayers = [...players];
-        generateSchedule(schedule.length || getNumRounds(numPlayers));
-        players = savedPlayers;
-        collapsedRounds = {};
+        const savedPlayers = [...tournamentState.value.players];
+        generateSchedule(tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers));
+        tournamentState.value.players = savedPlayers;
+        tournamentState.value.collapsedRounds = {};
         saveLocal();
         logActivity('regeneró el fixture');
         renderAll();
@@ -815,13 +803,13 @@ import {
     function resetAll() {
         if (!confirm('¿Borrar todo (nombres y resultados)?')) return;
         rememberStateForUndo();
-        numPlayers = 9;
-        gamesPerSet = 4;
-        players = defaultPlayers(numPlayers);
+        tournamentState.value.numPlayers = 9;
+        tournamentState.value.gamesPerSet = 4;
+        tournamentState.value.players = defaultPlayers(tournamentState.value.numPlayers);
         generateSchedule();
-        collapsedRounds = {};
-        document.getElementById('player-count').value = numPlayers;
-        document.getElementById('games-per-set').value = gamesPerSet;
+        tournamentState.value.collapsedRounds = {};
+        document.getElementById('player-count').value = tournamentState.value.numPlayers;
+        document.getElementById('games-per-set').value = tournamentState.value.gamesPerSet;
         if (tournamentId) saveLocal();
         else {
             localStateStore.remove();
@@ -842,16 +830,16 @@ import {
     function renderPlayers() {
         const container = document.getElementById('players-container');
         container.innerHTML = '';
-        players.forEach((p, idx) => {
+        tournamentState.value.players.forEach((p, idx) => {
             const input = document.createElement('input');
             input.type = 'text';
             input.value = p;
             input.placeholder = `Jugador ${idx + 1}`;
             input.addEventListener('change', (e) => {
                 rememberStateForUndo();
-                players[idx] = e.target.value.trim() || `Jugador ${idx + 1}`;
+                tournamentState.value.players[idx] = e.target.value.trim() || `Jugador ${idx + 1}`;
                 saveLocal();
-                logActivity(`cambió el nombre de ${p} a ${players[idx]}`);
+                logActivity(`cambió el nombre de ${p} a ${tournamentState.value.players[idx]}`);
                 updateIdentityStatus();
                 renderRounds();
                 calculateStats();
@@ -862,7 +850,7 @@ import {
 
     function buildSelect(playerIndex, roundIdx, matchIdx, role) {
         let html = `<select onchange="updateMatchPlayer(${roundIdx}, ${matchIdx}, '${role}', this.value)">`;
-        players.forEach((p, idx) => {
+        tournamentState.value.players.forEach((p, idx) => {
             html += `<option value="${idx}" ${idx === playerIndex ? 'selected' : ''}>${p}</option>`;
         });
         html += '</select>';
@@ -880,14 +868,14 @@ import {
 
         slots.forEach(slot => {
             const playerId = slot.match[slot.role];
-            if (Number.isInteger(playerId) && playerId >= 0 && playerId < numPlayers && !usedPlayers.has(playerId)) {
+            if (Number.isInteger(playerId) && playerId >= 0 && playerId < tournamentState.value.numPlayers && !usedPlayers.has(playerId)) {
                 usedPlayers.add(playerId);
             } else {
                 slot.match[slot.role] = null;
             }
         });
 
-        const availablePlayers = Array.from({ length: numPlayers }, (_, id) => id)
+        const availablePlayers = Array.from({ length: tournamentState.value.numPlayers }, (_, id) => id)
             .filter(id => !usedPlayers.has(id));
         slots.forEach(slot => {
             if (slot.match[slot.role] === null) slot.match[slot.role] = availablePlayers.shift();
@@ -897,7 +885,7 @@ import {
     function askPlayerChange(previousPlayer, selectedPlayer) {
         const modal = document.getElementById('player-change-modal');
         document.getElementById('player-change-description').textContent =
-            `${players[selectedPlayer]} reemplaza a ${players[previousPlayer]}. ¿Cómo querés aplicar el cambio?`;
+            `${tournamentState.value.players[selectedPlayer]} reemplaza a ${tournamentState.value.players[previousPlayer]}. ¿Cómo querés aplicar el cambio?`;
         modal.hidden = false;
         return new Promise(resolve => { resolvePlayerChange = resolve; });
     }
@@ -933,11 +921,11 @@ import {
     }
 
     function hasRecordedScoresFromRound(roundIdx) {
-        return schedule.slice(roundIdx).some(round => round.matches.some(isMatchDone));
+        return tournamentState.value.schedule.slice(roundIdx).some(round => round.matches.some(isMatchDone));
     }
 
     async function updateMatchPlayer(roundIdx, matchIdx, role, newValue) {
-        const round = schedule[roundIdx];
+        const round = tournamentState.value.schedule[roundIdx];
         const selectedPlayer = parseInt(newValue, 10);
         const targetMatch = round.matches[matchIdx];
         const previousPlayer = targetMatch[role];
@@ -955,15 +943,15 @@ import {
                 return;
             }
             rememberStateForUndo();
-            for (let index = roundIdx; index < schedule.length; index++) {
-                swapPlayersInRound(schedule[index], previousPlayer, selectedPlayer);
+            for (let index = roundIdx; index < tournamentState.value.schedule.length; index++) {
+                swapPlayersInRound(tournamentState.value.schedule[index], previousPlayer, selectedPlayer);
             }
         } else {
             rememberStateForUndo();
             applySingleRoundPlayerChange(round, targetMatch, role, previousPlayer, selectedPlayer);
         }
         saveLocal();
-        logActivity(`${scope === 'future' ? 'reemplazó en las rondas restantes' : 'cambió en esta ronda'} a ${players[previousPlayer]} por ${players[selectedPlayer]}`);
+        logActivity(`${scope === 'future' ? 'reemplazó en las rondas restantes' : 'cambió en esta ronda'} a ${tournamentState.value.players[previousPlayer]} por ${tournamentState.value.players[selectedPlayer]}`);
         renderRounds();
         calculateStats();
     }
@@ -972,14 +960,14 @@ import {
         const parsed = parseInt(value, 10);
         const nextScore = value === '' || Number.isNaN(parsed)
             ? ''
-            : Math.max(0, Math.min(gamesPerSet, parsed));
-        if (schedule[roundIdx].matches[matchIdx][team] === nextScore) return;
+            : Math.max(0, Math.min(tournamentState.value.gamesPerSet, parsed));
+        if (tournamentState.value.schedule[roundIdx].matches[matchIdx][team] === nextScore) return;
         rememberStateForUndo();
-        schedule[roundIdx].matches[matchIdx][team] = nextScore;
+        tournamentState.value.schedule[roundIdx].matches[matchIdx][team] = nextScore;
         saveLocal();
-        const match = schedule[roundIdx].matches[matchIdx];
+        const match = tournamentState.value.schedule[roundIdx].matches[matchIdx];
         if (isMatchDone(match)) {
-            logActivity(`cargó el resultado ${match.score1}–${match.score2} de ${players[match.t1_p1]} / ${players[match.t1_p2]} vs ${players[match.t2_p1]} / ${players[match.t2_p2]}`);
+            logActivity(`cargó el resultado ${match.score1}–${match.score2} de ${tournamentState.value.players[match.t1_p1]} / ${tournamentState.value.players[match.t1_p2]} vs ${tournamentState.value.players[match.t2_p1]} / ${tournamentState.value.players[match.t2_p2]}`);
         }
         calculateStats();
         updateProgress();
@@ -987,8 +975,8 @@ import {
     }
 
     function adjustScore(roundIdx, matchIdx, team, amount) {
-        const current = parseInt(schedule[roundIdx].matches[matchIdx][team], 10);
-        const next = Math.max(0, Math.min(gamesPerSet, (Number.isNaN(current) ? 0 : current) + amount));
+        const current = parseInt(tournamentState.value.schedule[roundIdx].matches[matchIdx][team], 10);
+        const next = Math.max(0, Math.min(tournamentState.value.gamesPerSet, (Number.isNaN(current) ? 0 : current) + amount));
         updateScore(roundIdx, matchIdx, team, next);
     }
 
@@ -999,8 +987,8 @@ import {
             playing.add(m.t2_p1); playing.add(m.t2_p2);
         });
         const resting = [];
-        for (let i = 0; i < numPlayers; i++) {
-            if (!playing.has(i)) resting.push(players[i]);
+        for (let i = 0; i < tournamentState.value.numPlayers; i++) {
+            if (!playing.has(i)) resting.push(tournamentState.value.players[i]);
         }
         return resting;
     }
@@ -1014,10 +1002,10 @@ import {
         const score1 = parseInt(m.score1, 10);
         const score2 = parseInt(m.score2, 10);
         if (score1 === score2) return 'Empate: revisá el resultado antes de cerrar la ronda.';
-        if (score1 < gamesPerSet && score2 < gamesPerSet) {
-            return `Ningún equipo llegó a ${gamesPerSet} games.`;
+        if (score1 < tournamentState.value.gamesPerSet && score2 < tournamentState.value.gamesPerSet) {
+            return `Ningún equipo llegó a ${tournamentState.value.gamesPerSet} games.`;
         }
-        if (score1 === gamesPerSet && score2 === gamesPerSet) {
+        if (score1 === tournamentState.value.gamesPerSet && score2 === tournamentState.value.gamesPerSet) {
             return 'Ambos equipos llegaron al objetivo de games.';
         }
         return '';
@@ -1028,7 +1016,7 @@ import {
     }
 
     function toggleRound(rIdx) {
-        collapsedRounds[rIdx] = !collapsedRounds[rIdx];
+        tournamentState.value.collapsedRounds[rIdx] = !tournamentState.value.collapsedRounds[rIdx];
         saveLocal();
         renderRounds();
     }
@@ -1037,9 +1025,9 @@ import {
         const container = document.getElementById('rounds-container');
         container.innerHTML = '';
 
-        schedule.forEach((round, rIdx) => {
+        tournamentState.value.schedule.forEach((round, rIdx) => {
             const done = isRoundDone(round);
-            const collapsed = collapsedRounds[rIdx] === true;
+            const collapsed = tournamentState.value.collapsedRounds[rIdx] === true;
             const resting = getRestingPlayers(round);
             const restLabel = resting.length === 0
                 ? 'Todos juegan'
@@ -1078,7 +1066,7 @@ import {
                         <div class="score-control team-one">
                             <button type="button" class="score-adjust" aria-label="Bajar puntaje del primer equipo en cancha ${m.court}"
                                     onclick="adjustScore(${rIdx}, ${mIdx}, 'score1', -1)">−</button>
-                            <input type="number" min="0" max="${gamesPerSet}" class="score-input" placeholder="0"
+                            <input type="number" min="0" max="${tournamentState.value.gamesPerSet}" class="score-input" placeholder="0"
                                    value="${m.score1}" inputmode="numeric"
                                    onchange="updateScore(${rIdx}, ${mIdx}, 'score1', this.value)">
                             <button type="button" class="score-adjust" aria-label="Subir puntaje del primer equipo en cancha ${m.court}"
@@ -1088,7 +1076,7 @@ import {
                         <div class="score-control team-two">
                             <button type="button" class="score-adjust" aria-label="Bajar puntaje del segundo equipo en cancha ${m.court}"
                                     onclick="adjustScore(${rIdx}, ${mIdx}, 'score2', -1)">−</button>
-                            <input type="number" min="0" max="${gamesPerSet}" class="score-input" placeholder="0"
+                            <input type="number" min="0" max="${tournamentState.value.gamesPerSet}" class="score-input" placeholder="0"
                                    value="${m.score2}" inputmode="numeric"
                                    onchange="updateScore(${rIdx}, ${mIdx}, 'score2', this.value)">
                             <button type="button" class="score-adjust" aria-label="Subir puntaje del segundo equipo en cancha ${m.court}"
@@ -1105,11 +1093,11 @@ import {
     }
 
     function getLeaderboardStats() {
-        const stats = players.map((name, id) => ({
+        const stats = tournamentState.value.players.map((name, id) => ({
             id, name, v: 0, d: 0, gf: 0, gc: 0, dif: 0, played: 0
         }));
 
-        schedule.forEach(round => {
+        tournamentState.value.schedule.forEach(round => {
             round.matches.forEach(m => {
                 if (!isMatchDone(m)) return;
                 const s1 = parseInt(m.score1, 10);
@@ -1169,9 +1157,9 @@ import {
     }
 
     function getBestStreak() {
-        const current = Array(numPlayers).fill(0);
-        const best = Array(numPlayers).fill(0);
-        schedule.forEach(round => round.matches.forEach(match => {
+        const current = Array(tournamentState.value.numPlayers).fill(0);
+        const best = Array(tournamentState.value.numPlayers).fill(0);
+        tournamentState.value.schedule.forEach(round => round.matches.forEach(match => {
             if (!isMatchDone(match)) return;
             const score1 = parseInt(match.score1, 10);
             const score2 = parseInt(match.score2, 10);
@@ -1192,17 +1180,17 @@ import {
         const longest = Math.max(...best);
         return {
             longest,
-            players: longest ? best.map((streak, index) => streak === longest ? players[index] : null).filter(Boolean) : []
+            players: longest ? best.map((streak, index) => streak === longest ? tournamentState.value.players[index] : null).filter(Boolean) : []
         };
     }
 
     function getTournamentSummaryText() {
         const stats = getLeaderboardStats();
-        const completed = schedule.reduce((total, round) => total + round.matches.filter(isMatchDone).length, 0);
-        const total = schedule.reduce((count, round) => count + round.matches.length, 0);
+        const completed = tournamentState.value.schedule.reduce((total, round) => total + round.matches.filter(isMatchDone).length, 0);
+        const total = tournamentState.value.schedule.reduce((count, round) => count + round.matches.length, 0);
         const streak = getBestStreak();
-        const title = tournamentName || 'Torneo Americano Pádel';
-        const date = tournamentDate ? formatTournamentDate(tournamentDate) : '';
+        const title = tournamentState.value.tournamentName || 'Torneo Americano Pádel';
+        const date = tournamentState.value.tournamentDate ? formatTournamentDate(tournamentState.value.tournamentDate) : '';
         const positions = stats.slice(0, 3).map((player, index) =>
             `${['🥇', '🥈', '🥉'][index]} ${player.name}: ${player.v}V · Dif ${player.dif >= 0 ? '+' : ''}${player.dif}`
         );
@@ -1223,8 +1211,8 @@ import {
     function openSummaryModal() {
         const stats = getLeaderboardStats();
         const streak = getBestStreak();
-        const completed = schedule.reduce((total, round) => total + round.matches.filter(isMatchDone).length, 0);
-        const total = schedule.reduce((count, round) => count + round.matches.length, 0);
+        const completed = tournamentState.value.schedule.reduce((total, round) => total + round.matches.filter(isMatchDone).length, 0);
+        const total = tournamentState.value.schedule.reduce((count, round) => count + round.matches.length, 0);
         const leader = stats[0];
         const positions = stats.slice(0, 3).map((player, index) =>
             `<li>${['🥇', '🥈', '🥉'][index]} <strong>${escapeHTML(player.name)}</strong> · ${player.v}V, ${player.d}D, Dif ${player.dif >= 0 ? '+' : ''}${player.dif}</li>`
@@ -1253,7 +1241,7 @@ import {
         const text = getTournamentSummaryText();
         if (navigator.share) {
             try {
-                await navigator.share({ title: tournamentName || 'Torneo Americano Pádel', text });
+                await navigator.share({ title: tournamentState.value.tournamentName || 'Torneo Americano Pádel', text });
             } catch (error) {
                 if (error.name !== 'AbortError') copyTournamentSummary();
             }
@@ -1263,9 +1251,9 @@ import {
     }
 
     function updateProgress() {
-        const total = schedule.reduce((acc, r) => acc + r.matches.length, 0);
+        const total = tournamentState.value.schedule.reduce((acc, r) => acc + r.matches.length, 0);
         let done = 0;
-        schedule.forEach(r => r.matches.forEach(m => { if (isMatchDone(m)) done++; }));
+        tournamentState.value.schedule.forEach(r => r.matches.forEach(m => { if (isMatchDone(m)) done++; }));
         const pct = total ? Math.round((done / total) * 100) : 0;
         document.getElementById('progress-fill').style.width = pct + '%';
         document.getElementById('progress-text').textContent =
@@ -1284,7 +1272,7 @@ import {
     }
 
     // Init
-    players = defaultPlayers(numPlayers);
+    tournamentState.value.players = defaultPlayers(tournamentState.value.numPlayers);
     generateSchedule();
     if (!loadFromHash()) {
         const saved = loadLocal();

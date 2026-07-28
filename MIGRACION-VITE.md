@@ -78,14 +78,14 @@ Progreso actual: Vite transforma `src/styles.css` y `src/app.js` en assets optim
 
 ### 3. Crear el núcleo de estado
 
-Estado: `[~]` En curso.
+Estado: `[x]` Completa.
 
-- `[~]` Crear un store central para `players`, `schedule`, `gamesPerSet`, `tournamentName`, `tournamentDate` y `collapsedRounds`.
+- `[x]` Crear un store central para `players`, `schedule`, `gamesPerSet`, `tournamentName`, `tournamentDate` y `collapsedRounds`.
 - `[x]` Extraer la creación y normalización del modelo base a `src/state/model.js`.
-- `[ ]` Definir todas las funciones de lectura y actualización del estado dentro del store.
+- `[x]` Definir las funciones de lectura, actualización, snapshot y reemplazo del estado dentro del store.
 - `[x]` Mantener `getState`, `setState`, undo y firmas de estado mediante un adaptador reutilizable.
 - `[x]` Separar la persistencia local del estado visual.
-- `[ ]` Desacoplar completamente el estado visual de las variables legacy de `app.js`.
+- `[x]` Desacoplar completamente el estado visual de las variables legacy de `app.js`.
 
 Estructura prevista:
 
@@ -97,7 +97,7 @@ src/services/local-storage.js
 
 Criterio de finalización: cambiar o cargar el estado no depende de variables globales repartidas por distintos módulos.
 
-Progreso actual: `src/state/store.js` concentra las firmas estables y el historial de undo como utilidades puras, mientras `src/services/local-storage.js` encapsula la lectura, escritura y limpieza de `localStorage`. `app.js` todavía adapta estas piezas al modelo de variables existente; la centralización completa queda para el siguiente paso de esta etapa.
+Progreso final: `src/state/store.js` concentra el estado activo del torneo, sus snapshots, reemplazos, firmas estables y el historial de undo. `src/state/model.js` crea y normaliza el modelo de datos, mientras `src/services/local-storage.js` encapsula la lectura, escritura y limpieza de `localStorage`.
 
 ### 4. Extraer el dominio del fixture
 

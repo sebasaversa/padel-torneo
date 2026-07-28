@@ -35,3 +35,19 @@ export function createStateStore({ read, write, maxUndo = 20 }) {
         }
     };
 }
+
+export function createTournamentState(initialState) {
+    let current = clone(initialState);
+
+    return {
+        get value() {
+            return current;
+        },
+        snapshot() {
+            return clone(current);
+        },
+        replace(nextState) {
+            current = clone(nextState);
+        }
+    };
+}
