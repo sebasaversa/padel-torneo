@@ -34,3 +34,23 @@ test('lee metadata faltante como un torneo previo sin propietario', async () => 
     assert.equal(metadata.ownerUid, null);
     assert.deepEqual(metadata.admins, {});
 });
+
+test('migra un torneo anterior y conserva la metadata si ya existe', async () => {
+    let value = null;
+    const ref = {
+        transaction: async updater => {
+            value = updater(value);
+            return { snapshot: { val: () => value } };
+        },
+        once: async () => ({ val: () => value })
+    };
+    const store = createTournamentMetadataStore({
+        database: { ref: () => ref },
+        serverTimestamp: () => 'timestamp'
+    });
+    const metadata = await store.initializeLegacy('anterior', 'super');
+    assert.equal(metadata.ownerUid, null);
+    assert.equal(metadata.admins.super, true);
+    await store.initialize('anterior', 'owner');
+    assert.equal(value.ownerUid, null);
+});

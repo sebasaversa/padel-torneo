@@ -25,6 +25,18 @@ export function createTournamentMetadata({ ownerUid, timestamp }) {
     };
 }
 
+export function createLegacyTournamentMetadata({ adminUid, timestamp }) {
+    const normalizedAdminUid = normalizeUid(adminUid);
+    if (!normalizedAdminUid) throw new Error('A super admin UID is required');
+    return {
+        ownerUid: null,
+        admins: { [normalizedAdminUid]: true },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        migratedAt: timestamp
+    };
+}
+
 export function normalizeTournamentMetadata(metadata) {
     const source = metadata && typeof metadata === 'object' ? metadata : {};
     const ownerUid = normalizeUid(source.ownerUid);

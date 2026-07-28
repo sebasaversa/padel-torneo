@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
     addTournamentAdmin,
     canManageTournament,
+    createLegacyTournamentMetadata,
     createTournamentMetadata,
     normalizeTournamentMetadata,
     removeTournamentAdmin
@@ -15,6 +16,16 @@ test('crea metadata de torneo con el creador como admin', () => {
         admins: { 'owner-1': true },
         createdAt: 'created',
         updatedAt: 'created'
+    });
+});
+
+test('migra un torneo previo sin asignarle propietario', () => {
+    assert.deepEqual(createLegacyTournamentMetadata({ adminUid: 'super-admin', timestamp: 'migrated' }), {
+        ownerUid: null,
+        admins: { 'super-admin': true },
+        createdAt: 'migrated',
+        updatedAt: 'migrated',
+        migratedAt: 'migrated'
     });
 });
 

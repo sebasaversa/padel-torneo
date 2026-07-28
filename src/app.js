@@ -23,6 +23,7 @@ import { getBestStreak, getLeaderboardStats, getProgress } from './features/scor
 import { buildTournamentSummaryText } from './features/scoring/summary.js';
 import { createFirebaseClient } from './services/firebase.js';
 import { createAuthSession } from './services/auth-session.js';
+import { createTournamentMetadataStore } from './services/tournament-metadata-store.js';
 import { createTournamentSync } from './services/tournament-sync.js';
 import { createTournamentIdentity } from './services/identity.js';
 import { createActivityLog } from './services/activity.js';
@@ -70,6 +71,7 @@ import { createAppController } from './app/app-controller.js';
     const authSession = createAuthSession({ firebase, auth: firebaseClient.getAuth() });
     let tournamentId = new URLSearchParams(location.search).get('torneo');
     let realtimeDb = null;
+    let tournamentMetadataStore = null;
     let tournamentRef = null;
     let tournamentSync = null;
     let tournamentIdentity = null;
@@ -157,6 +159,19 @@ import { createAppController } from './app/app-controller.js';
             sessionRole = null;
         }
         renderAuthStatus();
+        await migrateLegacyTournamentIfNeeded();
+    }
+
+    async function migrateLegacyTournamentIfNeeded() {
+        if (sessionRole !== 'superAdmin' || !sessionUser || !tournamentId || !tournamentMetadataStore) return;
+        try {
+            const metadata = await tournamentMetadataStore.get(tournamentId);
+            if (!metadata.ownerUid && !Object.keys(metadata.admins).length) {
+                await tournamentMetadataStore.initializeLegacy(tournamentId, sessionUser.uid);
+            }
+        } catch (error) {
+            console.warn('No se pudo preparar la metadata del torneo anterior.', error);
+        }
     }
 
     async function bootstrapSuperAdmin() {
@@ -737,6 +752,10 @@ import { createAppController } from './app/app-controller.js';
         if (realtimeDb) return realtimeDb;
         try {
             realtimeDb = await firebaseClient.getDatabase();
+            tournamentMetadataStore = createTournamentMetadataStore({
+                database: realtimeDb,
+                serverTimestamp: () => firebaseClient.serverTimestamp()
+            });
             return realtimeDb;
         } catch (error) {
             console.error(error);
@@ -807,6 +826,7 @@ import { createAppController } from './app/app-controller.js';
             });
             activityLog.connect();
             await tournamentIdentity.connect({ actorName: getActorName(), actorPlayerId });
+            await migrateLegacyTournamentIfNeeded();
         } catch (error) { /* status set in ensureFirebase */ }
     }
 
@@ -844,6 +864,11 @@ import { createAppController } from './app/app-controller.js';
 
     async function createSharedTournament(copyLink = false) {
         if (!tournamentId) {
+            if (!sessionUser || !['admin', 'superAdmin'].includes(sessionRole)) {
+                showToast('Iniciá sesión como admin para crear un torneo compartido.');
+                openAuthModal();
+                return;
+            }
             const chosenName = await askTournamentName();
             if (chosenName === null) return;
 
@@ -859,6 +884,7 @@ import { createAppController } from './app/app-controller.js';
             saveLocal();
             renderAll();
             await connectToTournament(id);
+            await tournamentMetadataStore?.initialize(id, sessionUser.uid);
             await saveRemoteNow();
         } else if (!tournamentRef) {
             await connectToTournament(tournamentId);
