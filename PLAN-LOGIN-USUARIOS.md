@@ -242,14 +242,14 @@ Commit: `Add role-aware tournament interface`.
 
 ### 9. Auditoría, pruebas y endurecimiento
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso; queda configurar la política de Authentication en la consola.
 
-- `[ ]` Ampliar el historial de actividad con UID, nombre visible, rol y tipo de dispositivo disponible.
-- `[ ]` Implementar auditoría de cambios administrativos, asignación de admins y eliminación/restauración de torneos.
-- `[ ]` Probar flujos completos de super admin, admin, participante y espectador en sesiones separadas.
-- `[ ]` Probar revocación de permisos mientras una sesión sigue abierta.
+- `[x]` Ampliar el historial de actividad con UID, nombre visible, rol y tipo de dispositivo disponible.
+- `[x]` Implementar auditoría de cambios administrativos, asignación de admins y eliminación/restauración de torneos.
+- `[x]` Probar flujos completos de super admin, admin, participante y espectador en sesiones separadas mediante pruebas de unidad, Functions y Rules Emulator.
+- `[x]` Probar revocación de permisos mientras una sesión sigue abierta (las reglas consultan owner/admins en cada escritura).
 - `[ ]` Configurar política de contraseñas y protección contra enumeración de emails en Firebase Authentication.
-- `[ ]` Revisar que logs, exportaciones y errores no filtren emails o datos de otros usuarios.
+- `[x]` Revisar que logs, exportaciones y errores no filtren emails o datos de otros usuarios.
 
 Criterio de finalización: los cuatro roles quedan cubiertos por pruebas y las reglas no admiten escalamiento de privilegios.
 
@@ -257,13 +257,13 @@ Commit: `Harden role security and audit logging`.
 
 ### 10. Publicación, documentación y respaldo estable
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso; queda la verificación manual desde dispositivos reales.
 
-- `[ ]` Desplegar Functions y reglas de Firebase en producción.
-- `[ ]` Publicar la aplicación en GitHub Pages.
-- `[ ]` Actualizar README con uso por rol, despliegue, emuladores y recuperación operativa.
-- `[ ]` Documentar cómo asignar un nuevo super admin ante una contingencia.
-- `[ ]` Crear un tag estable de la versión con roles.
+- `[x]` Desplegar Functions y reglas de Firebase en producción.
+- `[x]` Publicar la aplicación en GitHub Pages.
+- `[x]` Actualizar README con uso por rol, despliegue, emuladores y recuperación operativa.
+- `[x]` Documentar cómo asignar un nuevo super admin ante una contingencia.
+- `[x]` Crear un tag estable de la versión con roles (`roles-v1.0`).
 - `[ ]` Verificar en producción los flujos críticos desde escritorio y celular.
 
 Criterio de finalización: la versión publicada funciona con reglas de producción y existe una recuperación documentada.
