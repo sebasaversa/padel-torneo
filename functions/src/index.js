@@ -3,14 +3,35 @@ import { getAuth } from 'firebase-admin/auth';
 import { getDatabase, ServerValue } from 'firebase-admin/database';
 import { defineSecret } from 'firebase-functions/params';
 import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https';
+import {
+    buildAdminProfile,
+    normalizeAdminCreation,
+    normalizeAdminUpdate,
+    serializeUserRecord
+} from './admin-users.js';
 import { buildSuperAdminProfile, isConfiguredSuperAdmin } from './super-admin.js';
 
 if (!getApps().length) initializeApp();
 
 const superAdminEmail = defineSecret('SUPER_ADMIN_EMAIL');
 
-// Punto de comprobación sin privilegios. Las Functions administrativas se
-// incorporarán en la etapa 4, una vez definido y asignado el super admin.
+function requireSuperAdmin(request) {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Iniciá sesión para continuar.');
+    if (request.auth.token.platformRole !== 'superAdmin') {
+        throw new HttpsError('permission-denied', 'Sólo el super admin puede administrar usuarios.');
+    }
+}
+
+async function saveAdminProfile(uid, user, currentProfile = {}) {
+    const profileRef = getDatabase().ref(`userProfiles/${uid}`);
+    await profileRef.transaction(current => ({
+        ...buildAdminProfile(user, current || currentProfile),
+        createdAt: current?.createdAt || ServerValue.TIMESTAMP,
+        updatedAt: ServerValue.TIMESTAMP
+    }));
+}
+
+// Punto de comprobación sin privilegios para verificar el despliegue.
 export const healthcheck = onRequest({ cors: false }, (_request, response) => {
     response.status(200).json({ status: 'ok' });
 });
@@ -41,4 +62,55 @@ export const bootstrapSuperAdmin = onCall({ secrets: [superAdminEmail] }, async 
     }));
 
     return { role: 'superAdmin' };
+});
+
+export const createAdminUser = onCall(async request => {
+    requireSuperAdmin(request);
+    let data;
+    try {
+        data = normalizeAdminCreation(request.data);
+    } catch (error) {
+        throw new HttpsError('invalid-argument', error.message);
+    }
+    const user = await getAuth().createUser(data);
+    await getAuth().setCustomUserClaims(user.uid, { platformRole: 'admin' });
+    await saveAdminProfile(user.uid, data);
+    return serializeUserRecord(await getAuth().getUser(user.uid));
+});
+
+export const updateAdminUser = onCall(async request => {
+    requireSuperAdmin(request);
+    const uid = typeof request.data?.uid === 'string' ? request.data.uid : '';
+    if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
+    let updates;
+    try {
+        updates = normalizeAdminUpdate(request.data);
+    } catch (error) {
+        throw new HttpsError('invalid-argument', error.message);
+    }
+    const user = await getAuth().updateUser(uid, updates);
+    await saveAdminProfile(uid, user);
+    return serializeUserRecord(await getAuth().getUser(uid));
+});
+
+export const deleteAdminUser = onCall(async request => {
+    requireSuperAdmin(request);
+    const uid = typeof request.data?.uid === 'string' ? request.data.uid : '';
+    if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
+    if (uid === request.auth.uid) throw new HttpsError('failed-precondition', 'No podés eliminar tu propia cuenta.');
+    const user = await getAuth().getUser(uid);
+    if (user.customClaims?.platformRole !== 'admin') {
+        throw new HttpsError('permission-denied', 'Sólo se pueden eliminar cuentas de admin.');
+    }
+    await getAuth().deleteUser(uid);
+    await getDatabase().ref(`userProfiles/${uid}`).remove();
+    return { deleted: true };
+});
+
+export const listAdminUsers = onCall(async request => {
+    requireSuperAdmin(request);
+    const result = await getAuth().listUsers(1000);
+    return result.users
+        .filter(user => user.customClaims?.platformRole === 'admin')
+        .map(serializeUserRecord);
 });

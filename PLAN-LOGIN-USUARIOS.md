@@ -169,7 +169,7 @@ Estado: `[~]` En curso.
 
 - `[x]` Implementar una Function de bootstrap protegida por el secreto `SUPER_ADMIN_EMAIL`.
 - `[ ]` Configurar el secreto, desplegar la Function y asignar la custom claim inicial del super admin.
-- `[ ]` Implementar Functions protegidas para crear, editar, desactivar, eliminar y listar usuarios.
+- `[x]` Implementar Functions protegidas para crear, editar, desactivar, eliminar y listar usuarios.
 - `[ ]` Implementar Functions para restablecer contraseñas o generar un enlace seguro de recuperación.
 - `[ ]` Crear el panel “Usuarios” exclusivo del super admin.
 - `[ ]` Registrar en actividad administrativa quién realizó cada cambio.
