@@ -7,6 +7,7 @@ export function bindStaticUIEvents(actions) {
     click('sign-out-button', actions.signOut);
     click('users-button', actions.openUsersModal);
     click('tournament-admin-button', actions.openTournamentAdminModal);
+    click('delete-tournament-button', actions.deleteTournament);
     click('close-tournament-admin-modal', actions.closeTournamentAdminModal);
     click('close-users-modal', actions.closeUsersModal);
     click('cancel-admin-edit-button', actions.cancelAdminEdit);
