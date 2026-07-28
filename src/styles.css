@@ -202,6 +202,18 @@
             color: var(--muted);
             font-size: 0.85rem;
         }
+        .history-page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 4px;
+        }
+        .history-page-header h1,
+        .history-page-subtitle {
+            text-align: left;
+        }
+        .history-page-subtitle { margin-bottom: 16px; }
         .tournament-history-list {
             display: grid;
             gap: 8px;
@@ -401,6 +413,7 @@
         @media (max-width: 480px) {
             h1 { font-size: 1.25rem; }
             .btn { min-height: 44px; }
+            .history-page-header { align-items: flex-start; }
             .score-adjust { height: 44px; }
             .team-pair { flex-direction: column; }
             .team select { max-width: 100%; }

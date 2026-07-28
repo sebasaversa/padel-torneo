@@ -170,6 +170,28 @@ import { createAppController } from './app/app-controller.js';
         location.assign(createSharedTournamentUrl(location.origin, location.pathname, id));
     }
 
+    function isHistoryPage() {
+        return !tournamentId && location.hash === '#historial';
+    }
+
+    function updatePageView() {
+        const historyPage = isHistoryPage();
+        document.getElementById('main-page').hidden = historyPage;
+        document.getElementById('tournament-history-page').hidden = !historyPage;
+        if (historyPage) renderPreviousTournaments();
+    }
+
+    function showTournamentHistory() {
+        if (tournamentId) return;
+        location.hash = 'historial';
+    }
+
+    function showMainPage() {
+        if (!isHistoryPage()) return;
+        history.replaceState(null, '', `${location.pathname}${location.search}`);
+        updatePageView();
+    }
+
     function updateSubtitle() {
         const courts = getCourts(tournamentState.value.numPlayers, tournamentState.value.numCourts);
         const rest = getRestCount(tournamentState.value.numPlayers, tournamentState.value.numCourts);
@@ -1038,6 +1060,7 @@ import { createAppController } from './app/app-controller.js';
         renderRounds();
         calculateStats();
         updateProgress();
+        updatePageView();
     }
 
     function initializeApplication() {
@@ -1050,6 +1073,7 @@ import { createAppController } from './app/app-controller.js';
     }
     if (tournamentId) connectToTournament(tournamentId);
     else loadSharedTournamentCatalog();
+    updatePageView();
     }
 
     function bindApplicationEvents() {
@@ -1060,7 +1084,7 @@ import { createAppController } from './app/app-controller.js';
     continueIdentitySelection, copyTournamentSummary, createSharedTournament,
     enterAsSpectator, exportJSON, importJSON, openActivityModal, openPreviousTournament, openSummaryModal,
     resetAll, resetSchedule, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
-    shareState, shareTournamentSummary, showIdentityChoice, undoLastChange
+    shareState, shareTournamentSummary, showIdentityChoice, showMainPage, showTournamentHistory, undoLastChange
     });
     }
 
@@ -1068,6 +1092,9 @@ import { createAppController } from './app/app-controller.js';
         return createAppController({
             initialize: initializeApplication,
             bindEvents: bindApplicationEvents,
-            onHashChange: () => loadFromHash()
+            onHashChange: () => {
+                loadFromHash();
+                updatePageView();
+            }
         });
     }

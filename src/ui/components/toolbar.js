@@ -2,10 +2,12 @@ export function renderTournamentToolbar({ tournamentId, tournamentName, tourname
     const title = document.getElementById('tournament-title');
     const date = document.getElementById('tournament-date');
     const createButton = document.getElementById('create-shared-button');
+    const historyButton = document.getElementById('history-button');
     const isShared = Boolean(tournamentId);
     createButton.disabled = isShared;
     createButton.textContent = isShared ? '☁️ Torneo compartido activo' : '☁️ Crear torneo compartido';
     createButton.title = isShared ? 'Ya estás dentro de un torneo compartido' : '';
+    if (historyButton) historyButton.hidden = isShared;
     if (isShared) {
         const visibleName = tournamentName || 'Torneo compartido';
         title.textContent = `🏆 ${visibleName}`;

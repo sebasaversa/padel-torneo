@@ -10,6 +10,7 @@
 <body>
 
 <div class="container">
+    <main id="main-page">
     <h1 id="tournament-title">🏆 Torneo Americano Pádel</h1>
     <p class="tournament-date" id="tournament-date" hidden></p>
     <p class="subtitle" id="subtitle">9 jugadores · 2 canchas · Sets a 4 games · Rotación automática</p>
@@ -18,15 +19,10 @@
         💡 <strong>Cómo usar entre todos:</strong> Tocá <em>Crear torneo compartido</em> una vez y mandá el link al grupo. Los cambios se actualizan automáticamente en todos los celulares. Al cambiar un jugador, elegí si el cambio es solo para esa ronda o para el resto del fixture.
     </div>
 
-    <div class="card tournament-history-card" hidden>
-        <h2>🕘 Torneos compartidos</h2>
-        <p class="tournament-history-description">Todos los torneos disponibles, ordenados por última actualización.</p>
-        <div class="tournament-history-list" id="tournament-history-list"></div>
-    </div>
-
     <div class="card">
         <div class="toolbar">
             <button class="btn btn-primary" id="create-shared-button">☁️ Crear torneo compartido</button>
+            <button class="btn btn-secondary" id="history-button">🕘 Historial de torneos</button>
             <button class="btn btn-primary" id="share-button">🔗 Compartir link</button>
             <button class="btn btn-secondary" id="undo-button" disabled>↩ Deshacer</button>
             <button class="btn btn-secondary" id="summary-button">🏁 Resumen</button>
@@ -113,6 +109,18 @@
         <h2 id="matches-title">3. Partidos (a 4 games)</h2>
         <div id="rounds-container"></div>
     </div>
+    </main>
+
+    <section id="tournament-history-page" hidden aria-labelledby="tournament-history-title">
+        <div class="history-page-header">
+            <h1 id="tournament-history-title">🕘 Historial de torneos</h1>
+            <button class="btn btn-secondary" id="back-to-main-button">← Volver</button>
+        </div>
+        <p class="subtitle history-page-subtitle">Todos los torneos compartidos disponibles, ordenados por última actualización.</p>
+        <div class="card tournament-history-card">
+            <div class="tournament-history-list" id="tournament-history-list"></div>
+        </div>
+    </section>
 </div>
 
 <div class="toast" id="toast"></div>

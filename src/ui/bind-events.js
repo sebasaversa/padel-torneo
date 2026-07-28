@@ -1,6 +1,8 @@
 export function bindStaticUIEvents(actions) {
     const click = (id, handler) => document.getElementById(id)?.addEventListener('click', handler);
     click('create-shared-button', () => actions.createSharedTournament());
+    click('history-button', actions.showTournamentHistory);
+    click('back-to-main-button', actions.showMainPage);
     click('share-button', actions.shareState);
     click('undo-button', actions.undoLastChange);
     click('summary-button', actions.openSummaryModal);
