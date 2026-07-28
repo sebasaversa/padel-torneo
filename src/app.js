@@ -253,6 +253,12 @@ import { createAppController } from './app/app-controller.js';
         } catch (error) { showToast(error.message || 'No se pudo borrar el torneo.'); }
     }
 
+    async function restoreTournament(id) {
+        if (sessionRole !== 'superAdmin') return;
+        try { await adminUserApi.setTournamentDeleted(id, false); await loadSharedTournamentCatalog(); showToast('Torneo restaurado.'); }
+        catch (error) { showToast(error.message || 'No se pudo restaurar el torneo.'); }
+    }
+
     function renderAdminUsers(users) {
         const list = document.getElementById('admin-users-list');
         list.replaceChildren();
@@ -1418,7 +1424,7 @@ import { createAppController } from './app/app-controller.js';
     openUsersModal, closeUsersModal, createAdminUser, deleteAdminUser,
     startAdminEdit, cancelAdminEdit, toggleAdminUser, generateAdminPasswordResetLink,
     openTournamentAdminModal, closeTournamentAdminModal, setTournamentAdmin
-    , deleteTournament
+    , deleteTournament, restoreTournament
     });
     }
 

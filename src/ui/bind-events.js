@@ -46,6 +46,8 @@ export function bindStaticUIEvents(actions) {
     document.getElementById('tournament-history-list')?.addEventListener('click', event => {
         const button = event.target.closest('[data-open-tournament]');
         if (button) actions.openPreviousTournament(button.dataset.openTournament);
+        const restore = event.target.closest('[data-restore-tournament]');
+        if (restore) actions.restoreTournament(restore.dataset.restoreTournament);
     });
     document.getElementById('player-count')?.addEventListener('change', event => actions.setPlayerCount(parseInt(event.target.value, 10)));
     document.getElementById('round-count')?.addEventListener('change', event => actions.setRoundCount(parseInt(event.target.value, 10)));
