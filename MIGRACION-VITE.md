@@ -80,6 +80,7 @@ Progreso actual: Vite transforma `src/styles.css` y `src/app.js` en assets optim
 Estado: `[~]` En curso.
 
 - `[~]` Crear un store central para `players`, `schedule`, `gamesPerSet`, `tournamentName`, `tournamentDate` y `collapsedRounds`.
+- `[x]` Extraer la creación y normalización del modelo base a `src/state/model.js`.
 - `[ ]` Definir todas las funciones de lectura y actualización del estado dentro del store.
 - `[x]` Mantener `getState`, `setState`, undo y firmas de estado mediante un adaptador reutilizable.
 - `[x]` Separar la persistencia local del estado visual.

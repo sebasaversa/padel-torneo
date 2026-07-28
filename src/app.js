@@ -1,4 +1,5 @@
 import { createStateStore } from './state/store.js';
+import { createDefaultState, normalizeState } from './state/model.js';
 import { createLocalStorageStore } from './services/local-storage.js';
 
     const MIN_PLAYERS = 4;
@@ -9,13 +10,14 @@ import { createLocalStorageStore } from './services/local-storage.js';
     const MIN_ROUNDS = 1;
     const MAX_ROUNDS = 50;
 
-    let numPlayers = 9;
-    let gamesPerSet = 4;
-    let players = [];
-    let schedule = [];
-    let collapsedRounds = {};
-    let tournamentName = '';
-    let tournamentDate = '';
+    const initialState = createDefaultState();
+    let numPlayers = initialState.numPlayers;
+    let gamesPerSet = initialState.gamesPerSet;
+    let players = initialState.players;
+    let schedule = initialState.schedule;
+    let collapsedRounds = initialState.collapsedRounds;
+    let tournamentName = initialState.tournamentName;
+    let tournamentDate = initialState.tournamentDate;
     let resolveTournamentName = null;
     let resolvePlayerChange = null;
     const MAX_UNDO_STEPS = 20;
@@ -64,7 +66,7 @@ import { createLocalStorageStore } from './services/local-storage.js';
     })();
 
     function defaultPlayers(n) {
-        return Array.from({ length: n }, (_, i) => `Jugador ${i + 1}`);
+        return createDefaultState({ numPlayers: n }).players;
     }
 
     function getCourts(n) {
@@ -375,17 +377,17 @@ import { createLocalStorageStore } from './services/local-storage.js';
     }
 
     function setState(state) {
-        if (state.numPlayers) numPlayers = state.numPlayers;
-        else if (state.players) numPlayers = state.players.length;
-        const savedGamesPerSet = parseInt(state.gamesPerSet, 10);
-        gamesPerSet = Number.isNaN(savedGamesPerSet)
-            ? 4
-            : Math.max(MIN_GAMES_PER_SET, Math.min(MAX_GAMES_PER_SET, savedGamesPerSet));
-        tournamentName = typeof state.tournamentName === 'string' ? state.tournamentName : '';
-        tournamentDate = typeof state.tournamentDate === 'string' ? state.tournamentDate : '';
-        if (state.players) players = state.players;
-        if (state.schedule) schedule = state.schedule;
-        if (state.collapsedRounds) collapsedRounds = state.collapsedRounds;
+        const normalized = normalizeState({ ...getState(), ...state }, {
+            minGamesPerSet: MIN_GAMES_PER_SET,
+            maxGamesPerSet: MAX_GAMES_PER_SET
+        });
+        numPlayers = normalized.numPlayers;
+        gamesPerSet = normalized.gamesPerSet;
+        players = normalized.players;
+        schedule = normalized.schedule;
+        collapsedRounds = normalized.collapsedRounds;
+        tournamentName = normalized.tournamentName;
+        tournamentDate = normalized.tournamentDate;
         document.getElementById('player-count').value = numPlayers;
         document.getElementById('games-per-set').value = gamesPerSet;
         renderAll();
