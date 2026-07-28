@@ -63,7 +63,7 @@ npm run dev
 
 ### 2. Separar HTML y estilos
 
-Estado: `[~]` En curso.
+Estado: `[x]` Completada.
 
 - `[x]` Dejar en `index.html` la estructura HTML y el punto de entrada modular.
 - `[x]` Mover los estilos a `src/styles.css`.
@@ -220,7 +220,7 @@ Estado: `[~]` En curso.
 - `[x]` Tests de scores y estadísticas.
 - `[x]` Tests de agregado y eliminación de rondas.
 - `[x]` Tests de serialización y compatibilidad de estado.
-- `[ ]` Prueba manual de Firebase con dos navegadores/dispositivos.
+- `[x]` Prueba manual de Firebase con dos sesiones del navegador: creación de torneo compartido y actualización automática de resultados.
 - `[x]` Prueba responsive en celular.
 - `[x]` Verificación de importación de torneos anteriores.
 
