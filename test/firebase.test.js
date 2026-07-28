@@ -171,6 +171,6 @@ test('registra presencia y reclama un jugador de forma exclusiva', async () => {
     await identity.connect();
     assert.equal(presenceData.connectedAt, 'timestamp');
     assert.equal(await identity.claimPlayer(0), true);
-    assert.deepEqual(claimData, { presenceId: 'device-1', actorName: 'Ana', device: 'Android · Chrome' });
+    assert.deepEqual(claimData, { uid: null, presenceId: 'device-1', displayName: 'Ana', claimedAt: 'timestamp', device: 'Android · Chrome' });
     assert.equal(presenceData.actorPlayerId, 0);
 });

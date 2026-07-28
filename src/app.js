@@ -984,6 +984,7 @@ import { createAppController } from './app/app-controller.js';
                 serverTimestamp: () => firebaseClient.serverTimestamp(),
                 getPlayerName: id => tournamentState.value.players[id],
                 getDeviceLabel,
+                authUid: sessionUser?.isAnonymous ? '' : sessionUser?.uid || '',
                 onPresenceCount: setPresenceStatus,
                 onClaims: claims => {
                     claimedPlayers = claims;

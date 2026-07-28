@@ -1,3 +1,5 @@
+import { buildPlayerClaim, canClaimPlayer } from './player-claims.js';
+
 export function createTournamentIdentity({
     tournamentRef,
     presenceId,
@@ -6,6 +8,7 @@ export function createTournamentIdentity({
     getDeviceLabel,
     onPresenceCount,
     onClaims
+    , authUid = ''
 }) {
     let presenceRef = null;
     let presenceUnsubscribe = null;
@@ -36,12 +39,12 @@ export function createTournamentIdentity({
     async function claimPlayer(playerId) {
         const claimRef = tournamentRef.child(`claims/${playerId}`);
         const result = await claimRef.transaction(current => {
-            if (!current || current.presenceId === presenceId) {
-                return { presenceId, actorName: getPlayerName(playerId), device: getDeviceLabel() };
+            if (canClaimPlayer(current, { uid: authUid, presenceId })) {
+                return { ...buildPlayerClaim({ uid: authUid, presenceId, displayName: getPlayerName(playerId), timestamp: serverTimestamp() }), device: getDeviceLabel() };
             }
             return;
         });
-        if (!result.committed || result.snapshot.val()?.presenceId !== presenceId) return false;
+        if (!result.committed || !canClaimPlayer(result.snapshot.val(), { uid: authUid, presenceId })) return false;
         if (actorClaimRef && actorClaimRef !== claimRef) actorClaimRef.remove().catch(() => {});
         actorClaimRef = claimRef;
         await actorClaimRef.onDisconnect().remove();
