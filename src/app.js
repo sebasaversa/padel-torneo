@@ -160,6 +160,13 @@ import { createAppController } from './app/app-controller.js';
         status.textContent = isRegisteredUser
             ? `Sesión iniciada: ${sessionUser.displayName}${roleLabel}`
             : 'Modo invitado: podés entrar a un torneo compartido desde su link.';
+        const canConfigure = !tournamentId || ['admin', 'superAdmin'].includes(sessionRole);
+        ['player-count', 'round-count', 'court-count', 'games-per-set', 'player-count-decrease', 'player-count-increase',
+            'round-count-decrease', 'round-count-increase', 'games-decrease', 'games-increase', 'reset-schedule-button', 'reset-all-button']
+            .forEach(id => {
+                const control = document.getElementById(id);
+                if (control) control.disabled = !canConfigure;
+            });
     }
 
     async function refreshSessionRole(forceRefresh = false) {
@@ -1216,6 +1223,11 @@ import { createAppController } from './app/app-controller.js';
         });
     }
 
+    function canEditMatch(match) {
+        if (!tournamentId || ['admin', 'superAdmin'].includes(sessionRole)) return true;
+        return Number.isInteger(actorPlayerId) && [match.t1_p1, match.t1_p2, match.t2_p1, match.t2_p2].includes(actorPlayerId);
+    }
+
     function askPlayerChange(previousPlayer, selectedPlayer) {
         const modal = document.getElementById('player-change-modal');
         document.getElementById('player-change-description').textContent =
@@ -1350,7 +1362,8 @@ import { createAppController } from './app/app-controller.js';
             onToggleRound: toggleRound,
             onUpdatePlayer: updateMatchPlayer,
             onAdjustScore: adjustScore,
-            onUpdateScore: updateScore
+            onUpdateScore: updateScore,
+            canEditMatch
         });
     }
 
