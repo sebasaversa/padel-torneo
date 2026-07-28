@@ -11,6 +11,7 @@ test('inicializa Firebase una sola vez y reutiliza la base', async () => {
     const database = { ref: () => ({}) };
     const auth = {
         currentUser: null,
+        onAuthStateChanged: listener => { listener(null); return () => {}; },
         signInAnonymously: async () => {
             signedIn += 1;
             auth.currentUser = { uid: 'anonymous-user', isAnonymous: true };
@@ -57,6 +58,7 @@ test('mantiene una sesión existente en lugar de reemplazarla por una anónima',
     const signedInUser = { uid: 'admin-1' };
     const auth = {
         currentUser: signedInUser,
+        onAuthStateChanged: listener => { listener(signedInUser); return () => {}; },
         signInAnonymously: async () => { signedInAnonymously += 1; }
     };
     const firebase = {
@@ -70,6 +72,30 @@ test('mantiene una sesión existente en lugar de reemplazarla por una anónima',
     const client = createFirebaseClient({ firebase, config: { projectId: 'test' } });
     await client.getDatabase();
     assert.equal(client.getAuth(), auth);
+    assert.equal(signedInAnonymously, 0);
+});
+
+test('espera la restauración de sesión antes de entrar como invitado', async () => {
+    let listener;
+    let signedInAnonymously = 0;
+    const persistedUser = { uid: 'google-user', isAnonymous: false };
+    const auth = {
+        currentUser: null,
+        onAuthStateChanged: callback => { listener = callback; return () => {}; },
+        signInAnonymously: async () => { signedInAnonymously += 1; }
+    };
+    const firebase = {
+        apps: [],
+        initializeApp: () => { firebase.apps.push({}); },
+        auth: () => auth,
+        database: () => ({})
+    };
+    firebase.database.ServerValue = { TIMESTAMP: 'timestamp' };
+    const client = createFirebaseClient({ firebase, config: { projectId: 'test' } });
+    const databasePromise = client.getDatabase();
+    auth.currentUser = persistedUser;
+    listener(persistedUser);
+    await databasePromise;
     assert.equal(signedInAnonymously, 0);
 });
 

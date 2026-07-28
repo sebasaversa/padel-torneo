@@ -1,6 +1,7 @@
 export function createFirebaseClient({ firebase, config, fetchFn = globalThis.fetch }) {
     let database = null;
     let authInstance = null;
+    let initialAuthState = null;
 
     function initialize() {
         if (!firebase.apps.length) firebase.initializeApp(config);
@@ -12,9 +13,30 @@ export function createFirebaseClient({ firebase, config, fetchFn = globalThis.fe
         return authInstance;
     }
 
+    function waitForInitialAuthState() {
+        const auth = getAuth();
+        if (auth.currentUser) return Promise.resolve(auth.currentUser);
+        if (!initialAuthState) {
+            initialAuthState = new Promise(resolve => {
+                let unsubscribe;
+                let resolved = false;
+                const finish = user => {
+                    if (resolved) return;
+                    resolved = true;
+                    if (typeof unsubscribe === 'function') unsubscribe();
+                    resolve(user);
+                };
+                unsubscribe = auth.onAuthStateChanged(finish);
+                if (resolved && typeof unsubscribe === 'function') unsubscribe();
+            });
+        }
+        return initialAuthState;
+    }
+
     return {
         async getDatabase() {
             const auth = getAuth();
+            await waitForInitialAuthState();
             if (!auth.currentUser) await auth.signInAnonymously();
             if (!database) database = firebase.database();
             return database;
