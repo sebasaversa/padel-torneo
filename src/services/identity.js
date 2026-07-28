@@ -30,6 +30,7 @@ export function createTournamentIdentity({
         await presenceRef.onDisconnect().remove();
         await presenceRef.set({
             connectedAt: serverTimestamp(),
+            uid: authUid || null,
             actorPlayerId,
             actorName,
             device: getDeviceLabel()
@@ -59,7 +60,7 @@ export function createTournamentIdentity({
 
     async function updatePresence({ actorPlayerId = null, actorName = 'Espectador' } = {}) {
         if (!presenceRef) return;
-        await presenceRef.update({ actorPlayerId, actorName, device: getDeviceLabel() });
+        await presenceRef.update({ uid: authUid || null, actorPlayerId, actorName, device: getDeviceLabel() });
     }
 
     function disconnect() {
