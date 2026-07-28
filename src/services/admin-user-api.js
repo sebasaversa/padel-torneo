@@ -16,6 +16,9 @@ export function createAdminUserApi({ callFunction }) {
         },
         remove(uid) {
             return callFunction('deleteAdminUser', { uid: requireUid(uid) });
+        },
+        generatePasswordResetLink(uid) {
+            return callFunction('generateAdminPasswordResetLink', { uid: requireUid(uid) });
         }
     };
 }

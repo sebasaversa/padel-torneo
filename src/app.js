@@ -90,6 +90,8 @@ import { createAppController } from './app/app-controller.js';
     let sessionRole = null;
     let bootstrapAttemptUid = null;
     let bootstrapAttemptPromise = null;
+    let adminUsers = [];
+    let editingAdminUid = null;
     const presenceId = (() => {
         const key = 'padel-torneo-device-id';
         const generatedId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
@@ -226,12 +228,17 @@ import { createAppController } from './app/app-controller.js';
             const email = document.createElement('small');
             email.textContent = `${user.email}${user.disabled ? ' · Desactivado' : ''}`;
             detail.append(name, email);
-            const remove = document.createElement('button');
-            remove.className = 'btn btn-danger btn-sm';
-            remove.type = 'button';
-            remove.dataset.deleteAdmin = user.uid;
-            remove.textContent = 'Eliminar';
-            row.append(detail, remove);
+            const actions = document.createElement('div');
+            actions.className = 'admin-user-actions';
+            [['Editar', 'editAdmin'], [user.disabled ? 'Activar' : 'Desactivar', 'toggleAdmin'], ['Recuperar clave', 'resetAdmin'], ['Eliminar', 'deleteAdmin']].forEach(([label, action]) => {
+                const button = document.createElement('button');
+                button.className = `btn btn-sm${action === 'deleteAdmin' ? ' btn-danger' : ' btn-secondary'}`;
+                button.type = 'button';
+                button.dataset[action] = user.uid;
+                button.textContent = label;
+                actions.append(button);
+            });
+            row.append(detail, actions);
             list.append(row);
         });
     }
@@ -241,6 +248,7 @@ import { createAppController } from './app/app-controller.js';
         status.textContent = 'Cargando usuarios…';
         try {
             const users = await adminUserApi.list();
+            adminUsers = users;
             renderAdminUsers(users);
             status.textContent = `${users.length} administrador${users.length === 1 ? '' : 'es'}.`;
         } catch (error) {
@@ -259,13 +267,57 @@ import { createAppController } from './app/app-controller.js';
         const email = document.getElementById('admin-user-email');
         const password = document.getElementById('admin-user-password');
         try {
-            await adminUserApi.create({ displayName: name.value.trim(), email: email.value.trim(), password: password.value });
-            name.value = ''; email.value = ''; password.value = '';
-            showToast('Administrador creado.');
+            if (editingAdminUid) {
+                const updates = { displayName: name.value.trim(), email: email.value.trim() };
+                if (password.value) updates.password = password.value;
+                await adminUserApi.update(editingAdminUid, updates);
+                showToast('Administrador actualizado.');
+            } else {
+                await adminUserApi.create({ displayName: name.value.trim(), email: email.value.trim(), password: password.value });
+                showToast('Administrador creado.');
+            }
+            cancelAdminEdit();
             await loadAdminUsers();
         } catch (error) {
             showToast(error.message || 'No se pudo crear el administrador.');
         }
+    }
+
+    function startAdminEdit(uid) {
+        const user = adminUsers.find(item => item.uid === uid);
+        if (!user) return;
+        editingAdminUid = uid;
+        document.getElementById('admin-user-name').value = user.displayName || '';
+        document.getElementById('admin-user-email').value = user.email || '';
+        const password = document.getElementById('admin-user-password');
+        password.value = ''; password.required = false;
+        document.getElementById('admin-user-password-label').textContent = 'Contraseña nueva (opcional)';
+        document.getElementById('create-admin-user-button').textContent = 'Guardar cambios';
+        document.getElementById('cancel-admin-edit-button').hidden = false;
+    }
+
+    function cancelAdminEdit() {
+        editingAdminUid = null;
+        document.getElementById('admin-user-form').reset();
+        document.getElementById('admin-user-password').required = true;
+        document.getElementById('admin-user-password-label').textContent = 'Contraseña inicial';
+        document.getElementById('create-admin-user-button').textContent = 'Crear administrador';
+        document.getElementById('cancel-admin-edit-button').hidden = true;
+    }
+
+    async function toggleAdminUser(uid) {
+        const user = adminUsers.find(item => item.uid === uid);
+        if (!user) return;
+        try { await adminUserApi.update(uid, { disabled: !user.disabled }); await loadAdminUsers(); }
+        catch (error) { showToast(error.message || 'No se pudo actualizar el administrador.'); }
+    }
+
+    async function generateAdminPasswordResetLink(uid) {
+        try {
+            const { link } = await adminUserApi.generatePasswordResetLink(uid);
+            await navigator.clipboard.writeText(link);
+            showToast('Link de recuperación copiado.');
+        } catch (error) { showToast(error.message || 'No se pudo generar el link.'); }
     }
 
     async function deleteAdminUser(uid) {
@@ -1321,7 +1373,8 @@ import { createAppController } from './app/app-controller.js';
     resetAll, resetSchedule, sendPasswordReset, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
     shareState, shareTournamentSummary, showIdentityChoice, showMainPage, showTournamentHistory, signInWithEmailAndPassword,
     signInWithGoogle, signOut, closeAuthModal, undoLastChange,
-    openUsersModal, closeUsersModal, createAdminUser, deleteAdminUser
+    openUsersModal, closeUsersModal, createAdminUser, deleteAdminUser,
+    startAdminEdit, cancelAdminEdit, toggleAdminUser, generateAdminPasswordResetLink
     });
     }
 

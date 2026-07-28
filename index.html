@@ -226,9 +226,10 @@
             <input id="admin-user-name" autocomplete="name" placeholder="Ej.: Ana Pérez" required>
             <label for="admin-user-email">Email</label>
             <input id="admin-user-email" type="email" autocomplete="email" inputmode="email" placeholder="admin@ejemplo.com" required>
-            <label for="admin-user-password">Contraseña inicial</label>
+            <label for="admin-user-password" id="admin-user-password-label">Contraseña inicial</label>
             <input id="admin-user-password" type="password" autocomplete="new-password" minlength="8" placeholder="Mínimo 8 caracteres" required>
             <button class="btn btn-primary" id="create-admin-user-button" type="submit">Crear administrador</button>
+            <button class="btn btn-secondary" id="cancel-admin-edit-button" type="button" hidden>Cancelar edición</button>
         </form>
         <h3>Administradores</h3>
         <div id="admin-users-status" class="users-status" aria-live="polite"></div>

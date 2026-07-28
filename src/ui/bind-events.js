@@ -7,6 +7,7 @@ export function bindStaticUIEvents(actions) {
     click('sign-out-button', actions.signOut);
     click('users-button', actions.openUsersModal);
     click('close-users-modal', actions.closeUsersModal);
+    click('cancel-admin-edit-button', actions.cancelAdminEdit);
     click('sign-in-google-button', actions.signInWithGoogle);
     click('sign-in-email-button', actions.signInWithEmailAndPassword);
     click('reset-password-button', actions.sendPasswordReset);
@@ -67,5 +68,11 @@ export function bindStaticUIEvents(actions) {
     document.getElementById('admin-users-list')?.addEventListener('click', event => {
         const button = event.target.closest('[data-delete-admin]');
         if (button) actions.deleteAdminUser(button.dataset.deleteAdmin);
+        const edit = event.target.closest('[data-edit-admin]');
+        if (edit) actions.startAdminEdit(edit.dataset.editAdmin);
+        const toggle = event.target.closest('[data-toggle-admin]');
+        if (toggle) actions.toggleAdminUser(toggle.dataset.toggleAdmin);
+        const reset = event.target.closest('[data-reset-admin]');
+        if (reset) actions.generateAdminPasswordResetLink(reset.dataset.resetAdmin);
     });
 }
