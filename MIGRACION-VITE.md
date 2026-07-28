@@ -190,7 +190,7 @@ src/ui/components/score-control.js
 src/ui/components/modal.js
 ```
 
-Progreso actual: `player-list.js` y `leaderboard.js` ya renderizan los controles de jugadores y la tabla general. Los eventos siguen delegando las acciones al controlador de la aplicación.
+Progreso actual: `toolbar.js`, `player-list.js`, `leaderboard.js`, `round-card.js` y `modal.js` ya separan las principales áreas visuales. Las rondas y los anotadores de puntos usan listeners explícitos; quedan los controles estáticos y algunos modales por migrar fuera de los handlers inline.
 
 ### 8. Componer la aplicación
 
