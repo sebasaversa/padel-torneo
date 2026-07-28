@@ -158,8 +158,8 @@ import { createAppController } from './app/app-controller.js';
     }
 
     async function bootstrapSuperAdmin() {
-        const callable = firebaseClient.getFunctions().httpsCallable('bootstrapSuperAdmin');
         try {
+            const callable = firebaseClient.getFunctions().httpsCallable('bootstrapSuperAdmin');
             await callable();
             await refreshSessionRole(true);
             return sessionRole === 'superAdmin';
@@ -190,9 +190,11 @@ import { createAppController } from './app/app-controller.js';
     async function signInWithGoogle() {
         try {
             const user = await authSession.signInWithGoogle();
-            const isSuperAdmin = await bootstrapSuperAdmin();
             closeAuthModal();
-            showToast(isSuperAdmin ? `Sesión iniciada como super admin: ${user.displayName}` : `Sesión iniciada como ${user.displayName}`);
+            const isSuperAdmin = await bootstrapSuperAdmin();
+            showToast(isSuperAdmin
+                ? `Sesión iniciada como super admin: ${user.displayName}`
+                : `Sesión iniciada como ${user.displayName}. No se pudo activar el rol de super admin todavía.`);
         } catch (error) {
             if (error?.code !== 'auth/popup-closed-by-user') showToast(getAuthErrorMessage(error));
         }
