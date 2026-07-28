@@ -7,7 +7,6 @@ export function bindStaticUIEvents(actions) {
     click('activity-button', actions.openActivityModal);
     click('export-button', actions.exportJSON);
     click('import-button', actions.importJSON);
-    click('add-round-button', actions.addRound);
     click('reset-schedule-button', actions.resetSchedule);
     click('reset-all-button', actions.resetAll);
     click('player-count-decrease', () => actions.changePlayerCount(-1));

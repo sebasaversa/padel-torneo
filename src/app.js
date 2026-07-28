@@ -109,10 +109,6 @@ import { createAppController } from './app/app-controller.js';
         });
     }
 
-    function addRound() {
-        setRoundCount(tournamentState.value.schedule.length + 1);
-    }
-
     function getTodayISODate() {
         const today = new Date();
         const month = String(today.getMonth() + 1).padStart(2, '0');
@@ -1044,8 +1040,8 @@ import { createAppController } from './app/app-controller.js';
 
     function bindApplicationEvents() {
     bindStaticUIEvents({
-    addRound, cancelPlayerChange, cancelTournamentName, changeGamesPerSet,
-    changePlayerCount, changeRoundCount, closeActivityModal, closeSummaryModal,
+    cancelPlayerChange, cancelTournamentName, changeGamesPerSet, changePlayerCount,
+    changeRoundCount, closeActivityModal, closeSummaryModal,
     confirmIdentitySelection, confirmPlayerChange, confirmTournamentName,
     continueIdentitySelection, copyTournamentSummary, createSharedTournament,
     enterAsSpectator, exportJSON, importJSON, openActivityModal, openPreviousTournament, openSummaryModal,
