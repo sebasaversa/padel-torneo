@@ -998,7 +998,7 @@ import { createAppController } from './app/app-controller.js';
                 serverTimestamp: () => firebaseClient.serverTimestamp(),
                 getPlayerName: id => tournamentState.value.players[id],
                 getDeviceLabel,
-                authUid: sessionUser?.isAnonymous ? '' : sessionUser?.uid || '',
+                authUid: sessionUser?.uid || '',
                 actorRole: sessionRole || 'spectator',
                 onPresenceCount: () => {},
                 onPresence: setPresenceStatus,
@@ -1273,6 +1273,15 @@ import { createAppController } from './app/app-controller.js';
     function updateScore(roundIdx, matchIdx, team, value) {
         const nextScore = normalizeScore(value, tournamentState.value.gamesPerSet);
         if (tournamentState.value.schedule[roundIdx].matches[matchIdx][team] === nextScore) return;
+        if (tournamentId && !['admin', 'superAdmin'].includes(sessionRole)) {
+            tournamentRef?.child(`state/schedule/${roundIdx}/matches/${matchIdx}/${team}`).set(nextScore)
+                .catch(error => {
+                    console.error(error);
+                    showToast('Sólo podés cargar resultados de los partidos que jugás.');
+                    renderRounds();
+                });
+            return;
+        }
         rememberStateForUndo();
         tournamentState.value.schedule[roundIdx].matches[matchIdx][team] = nextScore;
         saveLocal();
