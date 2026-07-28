@@ -101,13 +101,13 @@ Progreso final: `src/state/store.js` concentra el estado activo del torneo, sus 
 
 ### 4. Extraer el dominio del fixture
 
-Estado: `[~]` En curso.
+Estado: `[x]` Completa.
 
 - `[x]` Mover la generación automática de rondas y parejas.
 - `[x]` Mover la lógica de cantidad de jugadores, canchas y descansos.
 - `[x]` Mover el agregado y eliminación independiente de rondas.
-- Mantener los reemplazos de jugadores por ronda o hacia el futuro.
-- Agregar tests para 4–16 jugadores y para rondas extra.
+- `[x]` Mantener los reemplazos de jugadores por ronda o hacia el futuro.
+- `[x]` Agregar tests para 4–16 jugadores y para rondas extra.
 
 Estructura prevista:
 
@@ -119,7 +119,7 @@ src/features/fixture/player-swaps.js
 
 Criterio de finalización: el fixture generado por la versión modular coincide con el actual para los mismos datos.
 
-Progreso actual: `src/features/fixture/generator.js` contiene la generación de rondas, descansos, canchas y parejas para todas las cantidades actuales de jugadores. `src/features/fixture/rounds.js` concentra el agregado, eliminación y validación de rondas con resultados. Queda extraer los reemplazos de jugadores y ampliar la cobertura de pruebas.
+Progreso final: `src/features/fixture/generator.js` contiene la generación de rondas, descansos, canchas y parejas para todas las cantidades actuales de jugadores. `src/features/fixture/rounds.js` concentra el agregado, eliminación y validación de rondas con resultados; `src/features/fixture/player-swaps.js`, los reemplazos. `npm test` verifica fixtures de 4 a 16 jugadores, rondas extra y la unicidad de jugadores durante reemplazos.
 
 ### 5. Extraer resultados y estadísticas
 

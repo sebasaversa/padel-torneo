@@ -10,6 +10,11 @@ import {
     getRestCount
 } from './features/fixture/generator.js';
 import { hasResults, resizeRounds } from './features/fixture/rounds.js';
+import {
+    applySingleRoundPlayerChange,
+    hasRecordedScoresFromRound,
+    swapPlayersInRound
+} from './features/fixture/player-swaps.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -856,31 +861,6 @@ import { hasResults, resizeRounds } from './features/fixture/rounds.js';
         return html;
     }
 
-    function getRoundPlayerSlots(round) {
-        const roles = ['t1_p1', 't1_p2', 't2_p1', 't2_p2'];
-        return round.matches.flatMap(match => roles.map(role => ({ match, role })));
-    }
-
-    function normalizeRoundPlayers(round) {
-        const slots = getRoundPlayerSlots(round);
-        const usedPlayers = new Set();
-
-        slots.forEach(slot => {
-            const playerId = slot.match[slot.role];
-            if (Number.isInteger(playerId) && playerId >= 0 && playerId < tournamentState.value.numPlayers && !usedPlayers.has(playerId)) {
-                usedPlayers.add(playerId);
-            } else {
-                slot.match[slot.role] = null;
-            }
-        });
-
-        const availablePlayers = Array.from({ length: tournamentState.value.numPlayers }, (_, id) => id)
-            .filter(id => !usedPlayers.has(id));
-        slots.forEach(slot => {
-            if (slot.match[slot.role] === null) slot.match[slot.role] = availablePlayers.shift();
-        });
-    }
-
     function askPlayerChange(previousPlayer, selectedPlayer) {
         const modal = document.getElementById('player-change-modal');
         document.getElementById('player-change-description').textContent =
@@ -903,26 +883,6 @@ import { hasResults, resizeRounds } from './features/fixture/rounds.js';
         closePlayerChangeModal(null);
     }
 
-    function swapPlayersInRound(round, firstPlayer, secondPlayer) {
-        getRoundPlayerSlots(round).forEach(slot => {
-            if (slot.match[slot.role] === firstPlayer) slot.match[slot.role] = secondPlayer;
-            else if (slot.match[slot.role] === secondPlayer) slot.match[slot.role] = firstPlayer;
-        });
-        normalizeRoundPlayers(round);
-    }
-
-    function applySingleRoundPlayerChange(round, targetMatch, role, previousPlayer, selectedPlayer) {
-        const selectedPlayerSlot = getRoundPlayerSlots(round)
-            .find(slot => (slot.match !== targetMatch || slot.role !== role) && slot.match[slot.role] === selectedPlayer);
-        if (selectedPlayerSlot) selectedPlayerSlot.match[selectedPlayerSlot.role] = previousPlayer;
-        targetMatch[role] = selectedPlayer;
-        normalizeRoundPlayers(round);
-    }
-
-    function hasRecordedScoresFromRound(roundIdx) {
-        return tournamentState.value.schedule.slice(roundIdx).some(round => round.matches.some(isMatchDone));
-    }
-
     async function updateMatchPlayer(roundIdx, matchIdx, role, newValue) {
         const round = tournamentState.value.schedule[roundIdx];
         const selectedPlayer = parseInt(newValue, 10);
@@ -936,18 +896,18 @@ import { hasResults, resizeRounds } from './features/fixture/rounds.js';
             return;
         }
         if (scope === 'future') {
-            if (hasRecordedScoresFromRound(roundIdx)) {
+            if (hasRecordedScoresFromRound(tournamentState.value.schedule, roundIdx, isMatchDone)) {
                 renderRounds();
                 showToast('No se puede cambiar el resto: ya hay resultados cargados desde esta ronda.');
                 return;
             }
             rememberStateForUndo();
             for (let index = roundIdx; index < tournamentState.value.schedule.length; index++) {
-                swapPlayersInRound(tournamentState.value.schedule[index], previousPlayer, selectedPlayer);
+                swapPlayersInRound(tournamentState.value.schedule[index], previousPlayer, selectedPlayer, tournamentState.value.numPlayers);
             }
         } else {
             rememberStateForUndo();
-            applySingleRoundPlayerChange(round, targetMatch, role, previousPlayer, selectedPlayer);
+            applySingleRoundPlayerChange(round, targetMatch, role, previousPlayer, selectedPlayer, tournamentState.value.numPlayers);
         }
         saveLocal();
         logActivity(`${scope === 'future' ? 'reemplazó en las rondas restantes' : 'cambió en esta ronda'} a ${tournamentState.value.players[previousPlayer]} por ${tournamentState.value.players[selectedPlayer]}`);
