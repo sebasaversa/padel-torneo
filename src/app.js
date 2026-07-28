@@ -17,6 +17,8 @@ import {
 } from './features/fixture/player-swaps.js';
 import { adjustScore as getAdjustedScore, normalizeScore } from './features/scoring/scores.js';
 import { getScoreWarning, isMatchDone, isRoundDone } from './features/scoring/validation.js';
+import { getBestStreak, getLeaderboardStats, getProgress } from './features/scoring/statistics.js';
+import { buildTournamentSummaryText } from './features/scoring/summary.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -1028,49 +1030,8 @@ import { getScoreWarning, isMatchDone, isRoundDone } from './features/scoring/va
         });
     }
 
-    function getLeaderboardStats() {
-        const stats = tournamentState.value.players.map((name, id) => ({
-            id, name, v: 0, d: 0, gf: 0, gc: 0, dif: 0, played: 0
-        }));
-
-        tournamentState.value.schedule.forEach(round => {
-            round.matches.forEach(m => {
-                if (!isMatchDone(m)) return;
-                const s1 = parseInt(m.score1, 10);
-                const s2 = parseInt(m.score2, 10);
-                const t1 = [m.t1_p1, m.t1_p2];
-                const t2 = [m.t2_p1, m.t2_p2];
-
-                t1.forEach(p => {
-                    if (p >= stats.length) return;
-                    stats[p].played += 1;
-                    stats[p].gf += s1;
-                    stats[p].gc += s2;
-                    if (s1 > s2) stats[p].v += 1;
-                    if (s1 < s2) stats[p].d += 1;
-                });
-                t2.forEach(p => {
-                    if (p >= stats.length) return;
-                    stats[p].played += 1;
-                    stats[p].gf += s2;
-                    stats[p].gc += s1;
-                    if (s2 > s1) stats[p].v += 1;
-                    if (s2 < s1) stats[p].d += 1;
-                });
-            });
-        });
-
-        stats.forEach(s => { s.dif = s.gf - s.gc; });
-        stats.sort((a, b) => {
-            if (b.v !== a.v) return b.v - a.v;
-            if (b.dif !== a.dif) return b.dif - a.dif;
-            return b.gf - a.gf;
-        });
-        return stats;
-    }
-
     function calculateStats() {
-        const stats = getLeaderboardStats();
+        const stats = getLeaderboardStats(tournamentState.value.players, tournamentState.value.schedule);
 
         const tbody = document.getElementById('leaderboard-body');
         tbody.innerHTML = stats.map((s, idx) => `
@@ -1092,70 +1053,28 @@ import { getScoreWarning, isMatchDone, isRoundDone } from './features/scoring/va
         }[char]));
     }
 
-    function getBestStreak() {
-        const current = Array(tournamentState.value.numPlayers).fill(0);
-        const best = Array(tournamentState.value.numPlayers).fill(0);
-        tournamentState.value.schedule.forEach(round => round.matches.forEach(match => {
-            if (!isMatchDone(match)) return;
-            const score1 = parseInt(match.score1, 10);
-            const score2 = parseInt(match.score2, 10);
-            const team1 = [match.t1_p1, match.t1_p2];
-            const team2 = [match.t2_p1, match.t2_p2];
-            if (score1 === score2) {
-                [...team1, ...team2].forEach(player => { current[player] = 0; });
-                return;
-            }
-            const winners = score1 > score2 ? team1 : team2;
-            const losers = score1 > score2 ? team2 : team1;
-            winners.forEach(player => {
-                current[player] += 1;
-                best[player] = Math.max(best[player], current[player]);
-            });
-            losers.forEach(player => { current[player] = 0; });
-        }));
-        const longest = Math.max(...best);
-        return {
-            longest,
-            players: longest ? best.map((streak, index) => streak === longest ? tournamentState.value.players[index] : null).filter(Boolean) : []
-        };
-    }
-
     function getTournamentSummaryText() {
-        const stats = getLeaderboardStats();
-        const completed = tournamentState.value.schedule.reduce((total, round) => total + round.matches.filter(isMatchDone).length, 0);
-        const total = tournamentState.value.schedule.reduce((count, round) => count + round.matches.length, 0);
-        const streak = getBestStreak();
         const title = tournamentState.value.tournamentName || 'Torneo Americano Pádel';
         const date = tournamentState.value.tournamentDate ? formatTournamentDate(tournamentState.value.tournamentDate) : '';
-        const positions = stats.slice(0, 3).map((player, index) =>
-            `${['🥇', '🥈', '🥉'][index]} ${player.name}: ${player.v}V · Dif ${player.dif >= 0 ? '+' : ''}${player.dif}`
-        );
-        const streakText = streak.longest
-            ? `🔥 Mejor racha: ${streak.players.join(', ')} (${streak.longest})`
-            : '🔥 Mejor racha: todavía sin resultados';
-        return [
-            `🏆 ${title}`,
-            date,
-            `📊 ${completed} de ${total} partidos anotados`,
-            '',
-            ...positions,
-            '',
-            streakText
-        ].filter((line, index, list) => line || (index > 0 && list[index - 1] !== '')).join('\n');
+        return buildTournamentSummaryText({
+            players: tournamentState.value.players,
+            schedule: tournamentState.value.schedule,
+            title,
+            date
+        });
     }
 
     function openSummaryModal() {
-        const stats = getLeaderboardStats();
-        const streak = getBestStreak();
-        const completed = tournamentState.value.schedule.reduce((total, round) => total + round.matches.filter(isMatchDone).length, 0);
-        const total = tournamentState.value.schedule.reduce((count, round) => count + round.matches.length, 0);
+        const stats = getLeaderboardStats(tournamentState.value.players, tournamentState.value.schedule);
+        const streak = getBestStreak(tournamentState.value.players, tournamentState.value.schedule);
+        const progress = getProgress(tournamentState.value.schedule);
         const leader = stats[0];
         const positions = stats.slice(0, 3).map((player, index) =>
             `<li>${['🥇', '🥈', '🥉'][index]} <strong>${escapeHTML(player.name)}</strong> · ${player.v}V, ${player.d}D, Dif ${player.dif >= 0 ? '+' : ''}${player.dif}</li>`
         ).join('');
         document.getElementById('summary-content').innerHTML = `
             <div class="summary-highlight">🏆 MVP actual: ${escapeHTML(leader.name)} · ${leader.v} victorias · Dif ${leader.dif >= 0 ? '+' : ''}${leader.dif}</div>
-            <p>${completed} de ${total} partidos anotados.</p>
+            <p>${progress.completed} de ${progress.total} partidos anotados.</p>
             <h3>Posiciones</h3>
             <ol class="summary-list">${positions}</ol>
             <h3>Racha</h3>
@@ -1187,13 +1106,10 @@ import { getScoreWarning, isMatchDone, isRoundDone } from './features/scoring/va
     }
 
     function updateProgress() {
-        const total = tournamentState.value.schedule.reduce((acc, r) => acc + r.matches.length, 0);
-        let done = 0;
-        tournamentState.value.schedule.forEach(r => r.matches.forEach(m => { if (isMatchDone(m)) done++; }));
-        const pct = total ? Math.round((done / total) * 100) : 0;
-        document.getElementById('progress-fill').style.width = pct + '%';
+        const progress = getProgress(tournamentState.value.schedule);
+        document.getElementById('progress-fill').style.width = progress.percentage + '%';
         document.getElementById('progress-text').textContent =
-            `${done} de ${total} partidos anotados (${pct}%)`;
+            `${progress.completed} de ${progress.total} partidos anotados (${progress.percentage}%)`;
     }
 
     function renderAll() {

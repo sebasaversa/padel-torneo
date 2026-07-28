@@ -3,6 +3,8 @@ import test from 'node:test';
 
 import { adjustScore, normalizeScore } from '../src/features/scoring/scores.js';
 import { getScoreWarning, isMatchDone, isRoundDone } from '../src/features/scoring/validation.js';
+import { getBestStreak, getLeaderboardStats, getProgress } from '../src/features/scoring/statistics.js';
+import { buildTournamentSummaryText } from '../src/features/scoring/summary.js';
 
 test('normaliza resultados dentro del objetivo de games', () => {
     assert.equal(normalizeScore('', 4), '');
@@ -27,4 +29,19 @@ test('detecta partidos, rondas y advertencias de resultados', () => {
     assert.equal(getScoreWarning(valid, 4), '');
     assert.equal(isRoundDone({ matches: [valid, incomplete] }), false);
     assert.equal(isRoundDone({ matches: [valid, draw] }), true);
+});
+
+test('calcula tabla, diferencia, progreso, rachas y resumen', () => {
+    const players = ['Ana', 'Beto', 'Caro', 'Dani'];
+    const schedule = [{ matches: [
+        { t1_p1: 0, t1_p2: 1, t2_p1: 2, t2_p2: 3, score1: 4, score2: 2 },
+        { t1_p1: 0, t1_p2: 2, t2_p1: 1, t2_p2: 3, score1: '', score2: '' }
+    ] }];
+    const stats = getLeaderboardStats(players, schedule);
+    assert.equal(stats[0].name, 'Ana');
+    assert.equal(stats[0].v, 1);
+    assert.equal(stats[0].dif, 2);
+    assert.deepEqual(getProgress(schedule), { completed: 1, total: 2, percentage: 50 });
+    assert.deepEqual(getBestStreak(players, schedule), { longest: 1, players: ['Ana', 'Beto'] });
+    assert.match(buildTournamentSummaryText({ players, schedule, title: 'Mi torneo', date: 'hoy' }), /Mi torneo/);
 });

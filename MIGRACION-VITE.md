@@ -123,12 +123,12 @@ Progreso final: `src/features/fixture/generator.js` contiene la generación de r
 
 ### 5. Extraer resultados y estadísticas
 
-Estado: `[~]` En curso.
+Estado: `[x]` Completa.
 
 - `[x]` Separar actualización de scores y límites de games.
 - `[x]` Separar detección de partidos y rondas completas.
 - `[x]` Separar advertencias de resultados.
-- Separar tabla general, diferencias, resumen y rachas.
+- `[x]` Separar tabla general, diferencias, resumen y rachas.
 - `[x]` Agregar tests unitarios para resultados válidos, empates y partidos incompletos.
 
 Estructura prevista:
@@ -139,6 +139,10 @@ src/features/scoring/validation.js
 src/features/scoring/statistics.js
 src/features/scoring/summary.js
 ```
+
+Criterio de finalización: el cálculo de resultados, posiciones y resumen se puede validar sin depender del DOM.
+
+Progreso final: `src/features/scoring/` concentra límites, validaciones, tabla general, diferencias, progreso, rachas y resumen. `npm test` cubre resultados válidos, empates, partidos incompletos y estadísticas derivadas.
 
 ### 6. Extraer servicios externos
 
