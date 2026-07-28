@@ -84,6 +84,8 @@ import { createAppController } from './app/app-controller.js';
     let sharedTournamentCatalog = [];
     let sessionUser = authSession.currentUser();
     let sessionRole = null;
+    let bootstrapAttemptUid = null;
+    let bootstrapAttemptPromise = null;
     const presenceId = (() => {
         const key = 'padel-torneo-device-id';
         const generatedId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
@@ -158,14 +160,20 @@ import { createAppController } from './app/app-controller.js';
     }
 
     async function bootstrapSuperAdmin() {
-        try {
-            await firebaseClient.callFunction('bootstrapSuperAdmin');
-            await refreshSessionRole(true);
-            return sessionRole === 'superAdmin';
-        } catch (error) {
-            await refreshSessionRole();
-            return false;
-        }
+        if (!sessionUser || sessionUser.isAnonymous || sessionRole === 'superAdmin') return sessionRole === 'superAdmin';
+        if (bootstrapAttemptUid === sessionUser.uid && bootstrapAttemptPromise) return bootstrapAttemptPromise;
+        bootstrapAttemptUid = sessionUser.uid;
+        bootstrapAttemptPromise = (async () => {
+            try {
+                await firebaseClient.callFunction('bootstrapSuperAdmin');
+                await refreshSessionRole(true);
+                return sessionRole === 'superAdmin';
+            } catch (error) {
+                await refreshSessionRole();
+                return false;
+            }
+        })();
+        return bootstrapAttemptPromise;
     }
 
     function openAuthModal() {
@@ -1182,7 +1190,11 @@ import { createAppController } from './app/app-controller.js';
     function initializeApplication() {
     authSession.subscribe(user => {
         sessionUser = user;
-        refreshSessionRole();
+        if (!user) {
+            bootstrapAttemptUid = null;
+            bootstrapAttemptPromise = null;
+        }
+        refreshSessionRole().then(() => bootstrapSuperAdmin());
     });
     tournamentState.value.players = defaultPlayers(tournamentState.value.numPlayers);
     generateSchedule();
