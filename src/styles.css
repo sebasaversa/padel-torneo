@@ -377,6 +377,8 @@
         }
         @media (max-width: 480px) {
             h1 { font-size: 1.25rem; }
+            .btn { min-height: 44px; }
+            .score-adjust { height: 44px; }
             .team-pair { flex-direction: column; }
             .team select { max-width: 100%; }
         }

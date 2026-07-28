@@ -221,7 +221,7 @@ Estado: `[~]` En curso.
 - `[x]` Tests de agregado y eliminación de rondas.
 - `[x]` Tests de serialización y compatibilidad de estado.
 - `[ ]` Prueba manual de Firebase con dos navegadores/dispositivos.
-- `[~]` Prueba responsive en celular.
+- `[x]` Prueba responsive en celular.
 - `[x]` Verificación de importación de torneos anteriores.
 
 ### 10. Deploy con GitHub Pages
