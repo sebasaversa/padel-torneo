@@ -410,6 +410,7 @@
             <button class="btn btn-secondary" onclick="openActivityModal()">🕘 Actividad</button>
             <button class="btn btn-secondary" onclick="exportJSON()">📥 Exportar</button>
             <button class="btn btn-secondary" onclick="importJSON()">📤 Importar</button>
+            <button class="btn btn-secondary btn-sm" onclick="addRound()">➕ Agregar ronda</button>
             <button class="btn btn-secondary btn-sm" onclick="resetSchedule()">🔄 Regenerar fixture</button>
             <button class="btn btn-danger btn-sm" onclick="resetAll()">🗑️ Borrar todo</button>
         </div>
@@ -634,29 +635,6 @@
         return Math.max(n - 1, 3);
     }
 
-    function generateSchedule9() {
-        schedule = [];
-        for (let i = 0; i < 9; i++) {
-            schedule.push({
-                id: i,
-                matches: [
-                    {
-                        court: 1,
-                        t1_p1: (0 + i) % 9, t1_p2: (7 + i) % 9,
-                        t2_p1: (3 + i) % 9, t2_p2: (4 + i) % 9,
-                        score1: '', score2: ''
-                    },
-                    {
-                        court: 2,
-                        t1_p1: (1 + i) % 9, t1_p2: (6 + i) % 9,
-                        t2_p1: (2 + i) % 9, t2_p2: (5 + i) % 9,
-                        score1: '', score2: ''
-                    }
-                ]
-            });
-        }
-    }
-
     function getActivePlayers(n, playingCount, round) {
         const active = [];
         for (let i = 0; i < playingCount; i++) {
@@ -697,32 +675,56 @@
         ];
     }
 
-    function generateScheduleGeneral() {
-        const n = numPlayers;
-        const playingCount = getPlayingCount(n);
-        const rounds = getNumRounds(n);
-        schedule = [];
-
-        for (let r = 0; r < rounds; r++) {
-            const active = getActivePlayers(n, playingCount, r);
-            let matches = [];
-
-            if (playingCount >= 8) {
-                matches = pairEight(active);
-            } else if (playingCount >= 4) {
-                matches = [pairFour(active, r)];
-            }
-
-            schedule.push({ id: r, matches });
+    function createAutomaticRound(roundIndex) {
+        if (numPlayers === 9) {
+            return {
+                id: roundIndex,
+                matches: [
+                    {
+                        court: 1,
+                        t1_p1: roundIndex % 9, t1_p2: (7 + roundIndex) % 9,
+                        t2_p1: (3 + roundIndex) % 9, t2_p2: (4 + roundIndex) % 9,
+                        score1: '', score2: ''
+                    },
+                    {
+                        court: 2,
+                        t1_p1: (1 + roundIndex) % 9, t1_p2: (6 + roundIndex) % 9,
+                        t2_p1: (2 + roundIndex) % 9, t2_p2: (5 + roundIndex) % 9,
+                        score1: '', score2: ''
+                    }
+                ]
+            };
         }
+
+        const playingCount = getPlayingCount(numPlayers);
+        const active = getActivePlayers(numPlayers, playingCount, roundIndex);
+        const matches = playingCount >= 8
+            ? pairEight(active)
+            : playingCount >= 4
+                ? [pairFour(active, roundIndex)]
+                : [];
+        return { id: roundIndex, matches };
     }
 
     function generateSchedule() {
-        if (numPlayers === 9) {
-            generateSchedule9();
-        } else {
-            generateScheduleGeneral();
+        schedule = Array.from({ length: getNumRounds(numPlayers) }, (_, roundIndex) =>
+            createAutomaticRound(roundIndex));
+    }
+
+    function addRound() {
+        if (getCourts(numPlayers) === 0) {
+            showToast('Se necesitan al menos 4 jugadores para agregar partidos.');
+            return;
         }
+        rememberStateForUndo();
+        const roundIndex = schedule.length;
+        schedule.push(createAutomaticRound(roundIndex));
+        collapsedRounds[roundIndex] = false;
+        saveLocal();
+        logActivity(`agregó la ronda ${roundIndex + 1}`);
+        renderAll();
+        const matches = schedule[roundIndex].matches.length;
+        showToast(`Ronda ${roundIndex + 1} agregada · ${matches} partido${matches === 1 ? '' : 's'} nuevo${matches === 1 ? '' : 's'}`);
     }
 
     function getTodayISODate() {
@@ -772,14 +774,17 @@
     function updateSubtitle() {
         const courts = getCourts(numPlayers);
         const rest = getRestCount(numPlayers);
-        const rounds = getNumRounds(numPlayers);
+        const rounds = schedule.length || getNumRounds(numPlayers);
+        const plannedRounds = getNumRounds(numPlayers);
         let restText = rest === 0 ? 'todos juegan' : `${rest} descansa${rest > 1 ? 'n' : ''} por ronda`;
         document.getElementById('subtitle').textContent =
             `${numPlayers} jugadores · ${courts} cancha${courts > 1 ? 's' : ''} · ${rounds} rondas · ${restText} · Sets a ${gamesPerSet} games`;
         document.getElementById('count-hint').textContent =
-            rest > 0
-                ? `${rounds} rondas para rotar el descanso`
-                : `${rounds} rondas de rotación de parejas`;
+            rounds > plannedRounds
+                ? `${rounds - plannedRounds} ronda${rounds - plannedRounds === 1 ? '' : 's'} extra agregada${rounds - plannedRounds === 1 ? '' : 's'}`
+                : rest > 0
+                    ? `${rounds} rondas para rotar el descanso`
+                    : `${rounds} rondas de rotación de parejas`;
         document.getElementById('matches-title').textContent = `3. Partidos (a ${gamesPerSet} games)`;
     }
 
