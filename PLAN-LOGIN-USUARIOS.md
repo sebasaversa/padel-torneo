@@ -181,14 +181,14 @@ Commit: `Add super admin user management`.
 
 ### 5. Administración por torneo e historial segmentado
 
-Estado: `[ ]` Pendiente.
+Estado: `[x]` Completada.
 
-- `[ ]` Crear interfaz para que el super admin agregue o quite admins de un torneo.
-- `[ ]` Permitir al admin crear torneos y registrar su propiedad.
-- `[ ]` Mostrar al admin sólo sus torneos creados y aquellos asignados explícitamente.
-- `[ ]` Mostrar al super admin todos los torneos, incluidos los eliminados lógicamente.
-- `[ ]` Implementar eliminación y recuperación de torneos según la decisión aprobada.
-- `[ ]` Asegurar que el historial actual no revele torneos de otros admins.
+- `[x]` Crear interfaz para que el super admin agregue o quite admins de un torneo.
+- `[x]` Permitir al admin crear torneos y registrar su propiedad.
+- `[x]` Mostrar al admin sólo sus torneos creados y aquellos asignados explícitamente.
+- `[x]` Mostrar al super admin todos los torneos, incluidos los eliminados lógicamente.
+- `[x]` Implementar eliminación y recuperación de torneos según la decisión aprobada.
+- `[x]` Asegurar que el historial actual no revele torneos de otros admins.
 
 Criterio de finalización: el historial y las acciones administrativas respetan la propiedad y las asignaciones por torneo.
 
