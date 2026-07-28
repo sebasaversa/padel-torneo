@@ -209,7 +209,7 @@
             margin-top: 10px;
             min-height: 44px;
         }
-        .auth-divider {
+.auth-divider {
             display: flex;
             align-items: center;
             gap: 8px;
@@ -217,7 +217,18 @@
             color: var(--muted);
             font-size: 0.78rem;
             text-align: center;
-        }
+}
+
+.users-modal-card { max-width: 620px; }
+.admin-user-form { display: grid; gap: 0.55rem; }
+.admin-user-form label { font-weight: 700; }
+.admin-user-form input { width: 100%; }
+.admin-user-form .btn { margin-top: 0.35rem; }
+.admin-users-list { display: grid; gap: 0.6rem; max-height: 38vh; overflow: auto; }
+.admin-user-row { display: flex; align-items: center; justify-content: space-between; gap: 0.7rem; padding: 0.7rem; border: 1px solid var(--border); border-radius: 10px; }
+.admin-user-row strong, .admin-user-row small { display: block; }
+.admin-user-row small, .users-status { color: var(--muted); }
+@media (max-width: 520px) { .admin-user-row { align-items: flex-start; flex-direction: column; } .admin-user-row .btn { width: 100%; } }
         .auth-divider::before,
         .auth-divider::after {
             content: '';

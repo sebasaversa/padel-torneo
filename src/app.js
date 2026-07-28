@@ -23,6 +23,7 @@ import { getBestStreak, getLeaderboardStats, getProgress } from './features/scor
 import { buildTournamentSummaryText } from './features/scoring/summary.js';
 import { createFirebaseClient } from './services/firebase.js';
 import { createAuthSession } from './services/auth-session.js';
+import { createAdminUserApi } from './services/admin-user-api.js';
 import { createTournamentMetadataStore } from './services/tournament-metadata-store.js';
 import { createTournamentSync } from './services/tournament-sync.js';
 import { createTournamentIdentity } from './services/identity.js';
@@ -69,6 +70,7 @@ import { createAppController } from './app/app-controller.js';
     };
     const firebaseClient = createFirebaseClient({ firebase, config: firebaseConfig });
     const authSession = createAuthSession({ firebase, auth: firebaseClient.getAuth() });
+    const adminUserApi = createAdminUserApi({ callFunction: (...args) => firebaseClient.callFunction(...args) });
     let tournamentId = new URLSearchParams(location.search).get('torneo');
     let realtimeDb = null;
     let tournamentMetadataStore = null;
@@ -142,9 +144,11 @@ import { createAppController } from './app/app-controller.js';
         const signInButton = document.getElementById('auth-button');
         const signOutButton = document.getElementById('sign-out-button');
         const status = document.getElementById('auth-status');
+        const usersButton = document.getElementById('users-button');
         const isRegisteredUser = sessionUser && !sessionUser.isAnonymous;
         signInButton.hidden = Boolean(isRegisteredUser);
         signOutButton.hidden = !isRegisteredUser;
+        usersButton.hidden = sessionRole !== 'superAdmin';
         const roleLabel = sessionRole === 'superAdmin' ? ' · Super admin' : sessionRole === 'admin' ? ' · Admin' : '';
         status.textContent = isRegisteredUser
             ? `Sesión iniciada: ${sessionUser.displayName}${roleLabel}`
@@ -200,6 +204,79 @@ import { createAppController } from './app/app-controller.js';
 
     function closeAuthModal() {
         setModalOpen('auth-modal', false);
+    }
+
+    function closeUsersModal() {
+        setModalOpen('users-modal', false);
+    }
+
+    function renderAdminUsers(users) {
+        const list = document.getElementById('admin-users-list');
+        list.replaceChildren();
+        if (!users.length) {
+            list.textContent = 'Todavía no hay administradores creados.';
+            return;
+        }
+        users.forEach(user => {
+            const row = document.createElement('div');
+            row.className = 'admin-user-row';
+            const detail = document.createElement('div');
+            const name = document.createElement('strong');
+            name.textContent = user.displayName || user.email;
+            const email = document.createElement('small');
+            email.textContent = `${user.email}${user.disabled ? ' · Desactivado' : ''}`;
+            detail.append(name, email);
+            const remove = document.createElement('button');
+            remove.className = 'btn btn-danger btn-sm';
+            remove.type = 'button';
+            remove.dataset.deleteAdmin = user.uid;
+            remove.textContent = 'Eliminar';
+            row.append(detail, remove);
+            list.append(row);
+        });
+    }
+
+    async function loadAdminUsers() {
+        const status = document.getElementById('admin-users-status');
+        status.textContent = 'Cargando usuarios…';
+        try {
+            const users = await adminUserApi.list();
+            renderAdminUsers(users);
+            status.textContent = `${users.length} administrador${users.length === 1 ? '' : 'es'}.`;
+        } catch (error) {
+            status.textContent = 'No se pudieron cargar los usuarios.';
+        }
+    }
+
+    async function openUsersModal() {
+        if (sessionRole !== 'superAdmin') return;
+        setModalOpen('users-modal', true);
+        await loadAdminUsers();
+    }
+
+    async function createAdminUser() {
+        const name = document.getElementById('admin-user-name');
+        const email = document.getElementById('admin-user-email');
+        const password = document.getElementById('admin-user-password');
+        try {
+            await adminUserApi.create({ displayName: name.value.trim(), email: email.value.trim(), password: password.value });
+            name.value = ''; email.value = ''; password.value = '';
+            showToast('Administrador creado.');
+            await loadAdminUsers();
+        } catch (error) {
+            showToast(error.message || 'No se pudo crear el administrador.');
+        }
+    }
+
+    async function deleteAdminUser(uid) {
+        if (!confirm('¿Eliminar este administrador? Esta acción no se puede deshacer.')) return;
+        try {
+            await adminUserApi.remove(uid);
+            showToast('Administrador eliminado.');
+            await loadAdminUsers();
+        } catch (error) {
+            showToast(error.message || 'No se pudo eliminar el administrador.');
+        }
     }
 
     function getAuthErrorMessage(error) {
@@ -1243,7 +1320,8 @@ import { createAppController } from './app/app-controller.js';
     enterAsSpectator, exportJSON, goHome, importJSON, openActivityModal, openAuthModal, openPreviousTournament, openSummaryModal,
     resetAll, resetSchedule, sendPasswordReset, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
     shareState, shareTournamentSummary, showIdentityChoice, showMainPage, showTournamentHistory, signInWithEmailAndPassword,
-    signInWithGoogle, signOut, closeAuthModal, undoLastChange
+    signInWithGoogle, signOut, closeAuthModal, undoLastChange,
+    openUsersModal, closeUsersModal, createAdminUser, deleteAdminUser
     });
     }
 

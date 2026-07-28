@@ -5,6 +5,8 @@ export function bindStaticUIEvents(actions) {
     click('back-to-main-button', actions.showMainPage);
     click('auth-button', actions.openAuthModal);
     click('sign-out-button', actions.signOut);
+    click('users-button', actions.openUsersModal);
+    click('close-users-modal', actions.closeUsersModal);
     click('sign-in-google-button', actions.signInWithGoogle);
     click('sign-in-email-button', actions.signInWithEmailAndPassword);
     click('reset-password-button', actions.sendPasswordReset);
@@ -57,5 +59,13 @@ export function bindStaticUIEvents(actions) {
     });
     document.getElementById('auth-password-input')?.addEventListener('keydown', event => {
         if (event.key === 'Enter') actions.signInWithEmailAndPassword();
+    });
+    document.getElementById('admin-user-form')?.addEventListener('submit', event => {
+        event.preventDefault();
+        actions.createAdminUser();
+    });
+    document.getElementById('admin-users-list')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-delete-admin]');
+        if (button) actions.deleteAdminUser(button.dataset.deleteAdmin);
     });
 }
