@@ -20,6 +20,7 @@ import { getScoreWarning, isMatchDone, isRoundDone } from './features/scoring/va
 import { getBestStreak, getLeaderboardStats, getProgress } from './features/scoring/statistics.js';
 import { buildTournamentSummaryText } from './features/scoring/summary.js';
 import { createFirebaseClient } from './services/firebase.js';
+import { createTournamentSync } from './services/tournament-sync.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -48,12 +49,9 @@ import { createFirebaseClient } from './services/firebase.js';
     let tournamentId = new URLSearchParams(location.search).get('torneo');
     let realtimeDb = null;
     let tournamentRef = null;
-    let remoteSaveTimer = null;
-    let applyingRemoteState = false;
-    let remoteUnsubscribe = null;
+    let tournamentSync = null;
     let presenceRef = null;
     let presenceUnsubscribe = null;
-    let lastSavedStateSignature = null;
     let actorPlayerId = null;
     let pendingActorPlayerId = null;
     let actorClaimRef = null;
@@ -286,7 +284,7 @@ import { createFirebaseClient } from './services/firebase.js';
     }
 
     function rememberStateForUndo() {
-        if (applyingRemoteState) return;
+        if (tournamentSync?.isApplyingRemoteState()) return;
         stateStore.remember();
         updateUndoButton();
     }
@@ -522,7 +520,7 @@ import { createFirebaseClient } from './services/firebase.js';
     }
 
     function logActivity(message) {
-        if (!tournamentRef || applyingRemoteState) return;
+        if (!tournamentRef || tournamentSync?.isApplyingRemoteState()) return;
         tournamentRef.child('history').push({
             message,
             actor: getActorName(),
@@ -571,14 +569,13 @@ import { createFirebaseClient } from './services/firebase.js';
     async function connectToTournament(id) {
         try {
             await ensureFirebase();
-            if (remoteUnsubscribe) remoteUnsubscribe();
+            if (tournamentSync) tournamentSync.disconnect();
             if (presenceUnsubscribe) presenceUnsubscribe();
             if (claimsUnsubscribe) claimsUnsubscribe();
             if (historyUnsubscribe) historyUnsubscribe();
             if (presenceRef) presenceRef.remove().catch(() => {});
             if (actorClaimRef) actorClaimRef.remove().catch(() => {});
             tournamentId = id;
-            lastSavedStateSignature = null;
             actorPlayerId = null;
             actorClaimRef = null;
             claimedPlayers = {};
@@ -587,29 +584,28 @@ import { createFirebaseClient } from './services/firebase.js';
             claimsLoaded = false;
             sharedStateLoaded = false;
             updateIdentityStatus();
-            tournamentRef = realtimeDb.ref(`tournaments/${id}`);
             setSyncStatus('Conectando al torneo compartido…');
-            const stateRef = tournamentRef.child('state');
-            const listener = stateRef.on('value', (snapshot) => {
-                const remoteState = snapshot.val();
+            tournamentSync = createTournamentSync({
+                database: realtimeDb,
+                serverTimestamp: () => firebaseClient.serverTimestamp(),
+                getState,
+                getStateSignature,
+                onStatus: setSyncStatus,
+                onRemoteState: (remoteState, { changedByAnotherDevice }) => {
                 sharedStateLoaded = true;
                 if (!remoteState) {
-                    setSyncStatus('Torneo compartido listo');
                     maybeRequestIdentity();
                     return;
                 }
-                const remoteSignature = getStateSignature(remoteState);
-                if (remoteSignature !== lastSavedStateSignature) {
+                if (changedByAnotherDevice) {
                     stateStore.clearUndo();
                     updateUndoButton();
                 }
-                applyingRemoteState = true;
                 setState(remoteState);
-                applyingRemoteState = false;
-                setSyncStatus('Sincronizado en todos los dispositivos');
                 maybeRequestIdentity();
-            }, () => setSyncStatus('No se pudo actualizar el torneo compartido'));
-            remoteUnsubscribe = () => stateRef.off('value', listener);
+                }
+            });
+            tournamentRef = tournamentSync.connect(id);
             const claimsRef = tournamentRef.child('claims');
             const claimsListener = claimsRef.on('value', snapshot => {
                 claimedPlayers = snapshot.val() || {};
@@ -644,23 +640,11 @@ import { createFirebaseClient } from './services/firebase.js';
     }
 
     function queueRemoteSave() {
-        if (!tournamentRef || applyingRemoteState) return;
-        clearTimeout(remoteSaveTimer);
-        setSyncStatus('Guardando cambios…');
-        remoteSaveTimer = setTimeout(saveRemoteNow, 350);
+        tournamentSync?.queueSave();
     }
 
     async function saveRemoteNow() {
-        if (!tournamentRef || applyingRemoteState) return;
-        try {
-            const state = getState();
-            lastSavedStateSignature = getStateSignature(state);
-            await tournamentRef.update({ state, updatedAt: firebaseClient.serverTimestamp() });
-            setSyncStatus('Sincronizado en todos los dispositivos');
-        } catch (error) {
-            console.error(error);
-            setSyncStatus('No se pudieron guardar los cambios compartidos');
-        }
+        await tournamentSync?.saveNow();
     }
 
     function askTournamentName() {
