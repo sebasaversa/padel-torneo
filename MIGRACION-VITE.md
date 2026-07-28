@@ -77,22 +77,24 @@ Progreso actual: Vite transforma `src/styles.css` y `src/app.js` en assets optim
 
 ### 3. Crear el núcleo de estado
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso.
 
-- Crear un store central para `players`, `schedule`, `gamesPerSet`, `tournamentName`, `tournamentDate` y `collapsedRounds`.
-- Definir funciones de lectura y actualización del estado.
-- Mantener `getState`, `setState`, undo y firmas de estado.
-- Separar persistencia local del estado visual.
+- `[~]` Crear un store central para `players`, `schedule`, `gamesPerSet`, `tournamentName`, `tournamentDate` y `collapsedRounds`.
+- `[ ]` Definir todas las funciones de lectura y actualización del estado dentro del store.
+- `[x]` Mantener `getState`, `setState`, undo y firmas de estado mediante un adaptador reutilizable.
+- `[x]` Separar la persistencia local del estado visual.
+- `[ ]` Desacoplar completamente el estado visual de las variables legacy de `app.js`.
 
 Estructura prevista:
 
 ```text
 src/state/store.js
-src/state/undo.js
 src/services/local-storage.js
 ```
 
 Criterio de finalización: cambiar o cargar el estado no depende de variables globales repartidas por distintos módulos.
+
+Progreso actual: `src/state/store.js` concentra las firmas estables y el historial de undo como utilidades puras, mientras `src/services/local-storage.js` encapsula la lectura, escritura y limpieza de `localStorage`. `app.js` todavía adapta estas piezas al modelo de variables existente; la centralización completa queda para el siguiente paso de esta etapa.
 
 ### 4. Extraer el dominio del fixture
 

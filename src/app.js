@@ -1,3 +1,6 @@
+import { createStateStore } from './state/store.js';
+import { createLocalStorageStore } from './services/local-storage.js';
+
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
     const MAX_COURTS = 2;
@@ -15,8 +18,8 @@
     let tournamentDate = '';
     let resolveTournamentName = null;
     let resolvePlayerChange = null;
-    let undoStack = [];
     const MAX_UNDO_STEPS = 20;
+    const localStateStore = createLocalStorageStore('padel-torneo');
     const firebaseConfig = {
         apiKey: 'AIzaSyAEWG54OzZ7QMHb6otPJTLwuE8ttbBNnPc',
         authDomain: 'padel-torneo-ec30a.firebaseapp.com',
@@ -342,30 +345,29 @@
         return { numPlayers, gamesPerSet, players, schedule, collapsedRounds, tournamentName, tournamentDate };
     }
 
+    const stateStore = createStateStore({
+        read: getState,
+        write: setState,
+        maxUndo: MAX_UNDO_STEPS
+    });
+
     function getStateSignature(value) {
-        if (Array.isArray(value)) return `[${value.map(getStateSignature).join(',')}]`;
-        if (value && typeof value === 'object') {
-            return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${getStateSignature(value[key])}`).join(',')}}`;
-        }
-        return JSON.stringify(value);
+        return stateStore.signature(value);
     }
 
     function rememberStateForUndo() {
         if (applyingRemoteState) return;
-        undoStack.push(JSON.parse(JSON.stringify(getState())));
-        if (undoStack.length > MAX_UNDO_STEPS) undoStack.shift();
+        stateStore.remember();
         updateUndoButton();
     }
 
     function updateUndoButton() {
         const button = document.getElementById('undo-button');
-        if (button) button.disabled = undoStack.length === 0;
+        if (button) button.disabled = !stateStore.hasUndo();
     }
 
     function undoLastChange() {
-        const previousState = undoStack.pop();
-        if (!previousState) return;
-        setState(previousState);
+        if (!stateStore.undo()) return;
         saveLocal();
         logActivity('deshizo su último cambio');
         updateUndoButton();
@@ -390,9 +392,7 @@
     }
 
     function saveLocal() {
-        try {
-            localStorage.setItem('padel-torneo', JSON.stringify(getState()));
-        } catch (e) { /* quota exceeded */ }
+        localStateStore.save(getState());
         queueRemoteSave();
     }
 
@@ -797,11 +797,7 @@
     }
 
     function loadLocal() {
-        try {
-            const raw = localStorage.getItem('padel-torneo');
-            if (raw) return JSON.parse(raw);
-        } catch (e) { /* corrupt */ }
-        return null;
+        return localStateStore.load();
     }
 
     function encodeState(state) {
@@ -902,7 +898,7 @@
         document.getElementById('games-per-set').value = gamesPerSet;
         if (tournamentId) saveLocal();
         else {
-            localStorage.removeItem('padel-torneo');
+            localStateStore.remove();
             history.replaceState(null, '', location.pathname);
         }
         renderAll();
