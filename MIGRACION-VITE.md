@@ -63,14 +63,16 @@ npm run dev
 
 ### 2. Separar HTML y estilos
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso.
 
-- Dejar en `index.html` solamente la estructura mínima de entrada.
-- Mover los estilos a `src/styles/`.
-- Separar estilos base, layout, controles, rondas, modales y vista móvil.
-- Mantener exactamente el aspecto y el comportamiento responsive actuales.
+- `[ ]` Dejar en `index.html` solamente la estructura mínima de entrada.
+- `[x]` Mover los estilos a `src/styles.css`.
+- `[x]` Mantener separados los estilos base, layout, controles, rondas, modales y vista móvil.
+- `[ ]` Mantener exactamente el aspecto y el comportamiento responsive actuales mediante una prueba visual.
 
 Criterio de finalización: la interfaz se ve igual en escritorio y celular, sin lógica de negocio dentro del HTML.
+
+Progreso actual: Vite ya transforma `src/styles.css` en un asset optimizado dentro de `dist/assets/`. El HTML todavía contiene la lógica JavaScript y se extraerá en las etapas siguientes.
 
 ### 3. Crear el núcleo de estado
 
