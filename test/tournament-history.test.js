@@ -7,6 +7,7 @@ import {
     upsertTournamentHistory
 } from '../src/services/tournament-history.js';
 import { buildTournamentHistoryMarkup } from '../src/ui/components/tournament-history.js';
+import { buildTournamentCatalog } from '../src/services/tournament-catalog.js';
 
 test('normaliza y ordena torneos anteriores', () => {
     const history = normalizeTournamentHistory([
@@ -46,4 +47,15 @@ test('genera entradas seguras y navegables para el historial', () => {
     assert.match(markup, /data-open-tournament="torneo-1"/);
     assert.match(markup, /&lt;Viernes&gt;/);
     assert.match(markup, /28 de julio · Abierto recién/);
+});
+
+test('incluye todos los torneos compartidos del catálogo global', () => {
+    const catalog = buildTournamentCatalog({
+        old: { updatedAt: 10, state: { tournamentName: 'Anterior', tournamentDate: '2026-07-01' } },
+        current: { updatedAt: 20, state: { tournamentName: 'Actual', tournamentDate: '2026-07-28' } },
+        incomplete: { updatedAt: 30 }
+    }, [{ id: 'old', lastOpenedAt: 99 }]);
+    assert.deepEqual(catalog.map(entry => entry.id), ['current', 'old']);
+    assert.equal(catalog[1].lastOpenedAt, 99);
+    assert.equal(catalog[0].updatedAt, 20);
 });

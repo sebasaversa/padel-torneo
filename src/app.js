@@ -2,6 +2,7 @@ import { createStateStore, createTournamentState } from './state/store.js';
 import { createDefaultState, normalizeState } from './state/model.js';
 import { createLocalStorageStore } from './services/local-storage.js';
 import { createTournamentHistoryStore } from './services/tournament-history.js';
+import { loadTournamentCatalog } from './services/tournament-catalog.js';
 import {
     createAutomaticRound as createFixtureRound,
     generateSchedule as buildSchedule,
@@ -78,6 +79,7 @@ import { createAppController } from './app/app-controller.js';
     let claimsLoaded = false;
     let sharedStateLoaded = false;
     let historyRecordedForTournament = false;
+    let sharedTournamentCatalog = [];
     const presenceId = (() => {
         const key = 'padel-torneo-device-id';
         const generatedId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
@@ -128,9 +130,9 @@ import { createAppController } from './app/app-controller.js';
         if (!tournamentId) setPresenceStatus(0);
     }
 
-    function formatHistoryLastOpened(timestamp) {
+    function formatTournamentUpdatedAt(timestamp) {
         if (!timestamp) return '';
-        return `Abierto ${new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(timestamp))}`;
+        return `Actualizado ${new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(timestamp))}`;
     }
 
     function rememberCurrentTournament() {
@@ -146,10 +148,21 @@ import { createAppController } from './app/app-controller.js';
     function renderPreviousTournaments() {
         const container = document.getElementById('tournament-history-list');
         if (!container) return;
-        renderTournamentHistory(container, tournamentId ? [] : tournamentHistoryStore.load(), {
+        renderTournamentHistory(container, tournamentId ? [] : sharedTournamentCatalog, {
             formatDate: formatTournamentDate,
-            formatLastOpened: formatHistoryLastOpened
+            formatLastOpened: formatTournamentUpdatedAt
         });
+    }
+
+    async function loadSharedTournamentCatalog() {
+        if (tournamentId) return;
+        try {
+            const database = await ensureFirebase();
+            sharedTournamentCatalog = await loadTournamentCatalog(database, tournamentHistoryStore.load());
+            renderPreviousTournaments();
+        } catch (error) {
+            console.error(error);
+        }
     }
 
     function openPreviousTournament(id) {
@@ -1036,6 +1049,7 @@ import { createAppController } from './app/app-controller.js';
         else renderAll();
     }
     if (tournamentId) connectToTournament(tournamentId);
+    else loadSharedTournamentCatalog();
     }
 
     function bindApplicationEvents() {

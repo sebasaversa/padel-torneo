@@ -12,7 +12,7 @@ La versión pública está disponible en [sebasaversa.github.io/padel-torneo](ht
 - Games por set configurables y anotación manual o mediante botones táctiles.
 - Tabla de posiciones con victorias, derrotas, games a favor/en contra y diferencia.
 - Torneos compartidos con actualización en tiempo real, presencia, identidad de jugador e historial de cambios.
-- Historial local de torneos compartidos abiertos previamente, accesible desde la pantalla principal.
+- Catálogo global de torneos compartidos, accesible desde la pantalla principal y ordenado por última actualización.
 - Exportación e importación de torneos en JSON, además de links locales de solo estado.
 - Diseño responsive para computadora y celular.
 
