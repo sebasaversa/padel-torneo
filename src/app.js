@@ -159,8 +159,7 @@ import { createAppController } from './app/app-controller.js';
 
     async function bootstrapSuperAdmin() {
         try {
-            const callable = firebaseClient.getFunctions().httpsCallable('bootstrapSuperAdmin');
-            await callable();
+            await firebaseClient.callFunction('bootstrapSuperAdmin');
             await refreshSessionRole(true);
             return sessionRole === 'superAdmin';
         } catch (error) {

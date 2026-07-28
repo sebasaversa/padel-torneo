@@ -20,8 +20,7 @@ test('inicializa Firebase una sola vez y reutiliza la base', async () => {
         apps: [],
         initializeApp: () => { initialized += 1; firebase.apps.push({}); },
         auth: () => auth,
-        database: () => database,
-        functions: region => ({ region })
+        database: () => database
     };
     firebase.database.ServerValue = { TIMESTAMP: 'timestamp' };
 
@@ -31,7 +30,26 @@ test('inicializa Firebase una sola vez y reutiliza la base', async () => {
     assert.equal(initialized, 1);
     assert.equal(signedIn, 1);
     assert.equal(client.serverTimestamp(), 'timestamp');
-    assert.deepEqual(client.getFunctions(), { region: 'us-central1' });
+});
+
+test('llama Functions con el token autenticado sin depender de scripts globales', async () => {
+    const auth = { currentUser: { isAnonymous: false, getIdToken: async () => 'token-seguro' } };
+    let request;
+    const client = createFirebaseClient({
+        firebase: {
+            apps: [{}], auth: () => auth,
+            database: Object.assign(() => ({}), { ServerValue: { TIMESTAMP: 'timestamp' } })
+        },
+        config: { projectId: 'padel-test' },
+        fetchFn: async (url, options) => {
+            request = { url, options };
+            return { ok: true, json: async () => ({ data: { role: 'superAdmin' } }) };
+        }
+    });
+    assert.deepEqual(await client.callFunction('bootstrapSuperAdmin'), { role: 'superAdmin' });
+    assert.equal(request.url, 'https://us-central1-padel-test.cloudfunctions.net/bootstrapSuperAdmin');
+    assert.equal(request.options.headers.Authorization, 'Bearer token-seguro');
+    assert.equal(request.options.body, '{"data":null}');
 });
 
 test('mantiene una sesión existente en lugar de reemplazarla por una anónima', async () => {
