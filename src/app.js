@@ -30,6 +30,8 @@ import {
     exportStateJSON,
     importStateJSON
 } from './services/sharing.js';
+import { renderPlayerList } from './ui/components/player-list.js';
+import { renderLeaderboard } from './ui/components/leaderboard.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -792,22 +794,14 @@ import {
 
     function renderPlayers() {
         const container = document.getElementById('players-container');
-        container.innerHTML = '';
-        tournamentState.value.players.forEach((p, idx) => {
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.value = p;
-            input.placeholder = `Jugador ${idx + 1}`;
-            input.addEventListener('change', (e) => {
-                rememberStateForUndo();
-                tournamentState.value.players[idx] = e.target.value.trim() || `Jugador ${idx + 1}`;
-                saveLocal();
-                logActivity(`cambió el nombre de ${p} a ${tournamentState.value.players[idx]}`);
-                updateIdentityStatus();
-                renderRounds();
-                calculateStats();
-            });
-            container.appendChild(input);
+        renderPlayerList(container, tournamentState.value.players, (index, previousName, nextName) => {
+            rememberStateForUndo();
+            tournamentState.value.players[index] = nextName;
+            saveLocal();
+            logActivity(`cambió el nombre de ${previousName} a ${nextName}`);
+            updateIdentityStatus();
+            renderRounds();
+            calculateStats();
         });
     }
 
@@ -988,18 +982,7 @@ import {
     function calculateStats() {
         const stats = getLeaderboardStats(tournamentState.value.players, tournamentState.value.schedule);
 
-        const tbody = document.getElementById('leaderboard-body');
-        tbody.innerHTML = stats.map((s, idx) => `
-            <tr class="${idx === 0 ? 'leader-row-1' : ''}">
-                <td>${idx + 1}</td>
-                <td>${s.name}</td>
-                <td>${s.v}</td>
-                <td>${s.d}</td>
-                <td>${s.gf}</td>
-                <td>${s.gc}</td>
-                <td>${s.dif > 0 ? '+' + s.dif : s.dif}</td>
-            </tr>
-        `).join('');
+        renderLeaderboard(document.getElementById('leaderboard-body'), stats);
     }
 
     function escapeHTML(value) {

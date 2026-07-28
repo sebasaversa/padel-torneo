@@ -171,9 +171,9 @@ Progreso final: Firebase, sincronización de estado, presencia, identidad, histo
 
 ### 7. Extraer la interfaz
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso.
 
-- Crear renderizadores o componentes para toolbar, jugadores, tabla, rondas, partidos y scores.
+- `[~]` Crear renderizadores o componentes para toolbar, jugadores, tabla, rondas, partidos y scores.
 - Separar modales de nombre de torneo, identidad, actividad, resumen y reemplazo de jugadores.
 - Mantener los controles accesibles y cómodos en celular.
 - Eliminar handlers inline progresivamente.
@@ -189,6 +189,8 @@ src/ui/components/round-card.js
 src/ui/components/score-control.js
 src/ui/components/modal.js
 ```
+
+Progreso actual: `player-list.js` y `leaderboard.js` ya renderizan los controles de jugadores y la tabla general. Los eventos siguen delegando las acciones al controlador de la aplicación.
 
 ### 8. Componer la aplicación
 
