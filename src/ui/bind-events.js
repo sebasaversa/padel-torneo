@@ -3,6 +3,7 @@ export function bindStaticUIEvents(actions) {
     click('create-shared-button', () => actions.createSharedTournament());
     click('history-button', actions.showTournamentHistory);
     click('back-to-main-button', actions.showMainPage);
+    click('home-button', actions.goHome);
     click('share-button', actions.shareState);
     click('undo-button', actions.undoLastChange);
     click('summary-button', actions.openSummaryModal);

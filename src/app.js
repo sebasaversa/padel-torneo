@@ -192,6 +192,10 @@ import { createAppController } from './app/app-controller.js';
         updatePageView();
     }
 
+    function goHome() {
+        location.assign(location.pathname);
+    }
+
     function updateSubtitle() {
         const courts = getCourts(tournamentState.value.numPlayers, tournamentState.value.numCourts);
         const rest = getRestCount(tournamentState.value.numPlayers, tournamentState.value.numCourts);
@@ -1082,7 +1086,7 @@ import { createAppController } from './app/app-controller.js';
     changeRoundCount, closeActivityModal, closeSummaryModal,
     confirmIdentitySelection, confirmPlayerChange, confirmTournamentName,
     continueIdentitySelection, copyTournamentSummary, createSharedTournament,
-    enterAsSpectator, exportJSON, importJSON, openActivityModal, openPreviousTournament, openSummaryModal,
+    enterAsSpectator, exportJSON, goHome, importJSON, openActivityModal, openPreviousTournament, openSummaryModal,
     resetAll, resetSchedule, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
     shareState, shareTournamentSummary, showIdentityChoice, showMainPage, showTournamentHistory, undoLastChange
     });
