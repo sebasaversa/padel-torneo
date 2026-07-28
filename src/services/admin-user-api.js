@@ -19,6 +19,12 @@ export function createAdminUserApi({ callFunction }) {
         },
         generatePasswordResetLink(uid) {
             return callFunction('generateAdminPasswordResetLink', { uid: requireUid(uid) });
+        },
+        setTournamentAdmin(tournamentId, uid, enabled) {
+            return callFunction('setTournamentAdmin', { tournamentId, uid: requireUid(uid), enabled });
+        },
+        setTournamentDeleted(tournamentId, deleted) {
+            return callFunction('setTournamentDeleted', { tournamentId, deleted });
         }
     };
 }

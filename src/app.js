@@ -147,10 +147,12 @@ import { createAppController } from './app/app-controller.js';
         const signOutButton = document.getElementById('sign-out-button');
         const status = document.getElementById('auth-status');
         const usersButton = document.getElementById('users-button');
+        const tournamentAdminButton = document.getElementById('tournament-admin-button');
         const isRegisteredUser = sessionUser && !sessionUser.isAnonymous;
         signInButton.hidden = Boolean(isRegisteredUser);
         signOutButton.hidden = !isRegisteredUser;
         usersButton.hidden = sessionRole !== 'superAdmin';
+        tournamentAdminButton.hidden = sessionRole !== 'superAdmin' || !tournamentId;
         const roleLabel = sessionRole === 'superAdmin' ? ' · Super admin' : sessionRole === 'admin' ? ' · Admin' : '';
         status.textContent = isRegisteredUser
             ? `Sesión iniciada: ${sessionUser.displayName}${roleLabel}`
@@ -211,6 +213,33 @@ import { createAppController } from './app/app-controller.js';
 
     function closeUsersModal() {
         setModalOpen('users-modal', false);
+    }
+
+    function closeTournamentAdminModal() { setModalOpen('tournament-admin-modal', false); }
+
+    async function openTournamentAdminModal() {
+        if (sessionRole !== 'superAdmin' || !tournamentId) return;
+        const list = document.getElementById('tournament-admin-list');
+        list.textContent = 'Cargando administradores…';
+        setModalOpen('tournament-admin-modal', true);
+        try {
+            const [users, metadata] = await Promise.all([adminUserApi.list(), tournamentMetadataStore.get(tournamentId)]);
+            list.replaceChildren();
+            users.forEach(user => {
+                const label = document.createElement('label');
+                label.className = 'admin-user-row';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox'; checkbox.dataset.tournamentAdmin = user.uid;
+                checkbox.checked = metadata.admins?.[user.uid] === true;
+                const text = document.createElement('span'); text.textContent = `${user.displayName || user.email} · ${user.email}`;
+                label.append(checkbox, text); list.append(label);
+            });
+        } catch { list.textContent = 'No se pudieron cargar los administradores.'; }
+    }
+
+    async function setTournamentAdmin(uid, enabled) {
+        try { await adminUserApi.setTournamentAdmin(tournamentId, uid, enabled); showToast(enabled ? 'Administrador asignado.' : 'Administrador removido.'); }
+        catch (error) { showToast(error.message || 'No se pudo actualizar el torneo.'); }
     }
 
     function renderAdminUsers(users) {
@@ -1376,7 +1405,8 @@ import { createAppController } from './app/app-controller.js';
     shareState, shareTournamentSummary, showIdentityChoice, showMainPage, showTournamentHistory, signInWithEmailAndPassword,
     signInWithGoogle, signOut, closeAuthModal, undoLastChange,
     openUsersModal, closeUsersModal, createAdminUser, deleteAdminUser,
-    startAdminEdit, cancelAdminEdit, toggleAdminUser, generateAdminPasswordResetLink
+    startAdminEdit, cancelAdminEdit, toggleAdminUser, generateAdminPasswordResetLink,
+    openTournamentAdminModal, closeTournamentAdminModal, setTournamentAdmin
     });
     }
 

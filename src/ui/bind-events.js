@@ -6,6 +6,8 @@ export function bindStaticUIEvents(actions) {
     click('auth-button', actions.openAuthModal);
     click('sign-out-button', actions.signOut);
     click('users-button', actions.openUsersModal);
+    click('tournament-admin-button', actions.openTournamentAdminModal);
+    click('close-tournament-admin-modal', actions.closeTournamentAdminModal);
     click('close-users-modal', actions.closeUsersModal);
     click('cancel-admin-edit-button', actions.cancelAdminEdit);
     click('sign-in-google-button', actions.signInWithGoogle);
@@ -74,5 +76,8 @@ export function bindStaticUIEvents(actions) {
         if (toggle) actions.toggleAdminUser(toggle.dataset.toggleAdmin);
         const reset = event.target.closest('[data-reset-admin]');
         if (reset) actions.generateAdminPasswordResetLink(reset.dataset.resetAdmin);
+    });
+    document.getElementById('tournament-admin-list')?.addEventListener('change', event => {
+        if (event.target.matches('[data-tournament-admin]')) actions.setTournamentAdmin(event.target.dataset.tournamentAdmin, event.target.checked);
     });
 }
