@@ -99,10 +99,10 @@ Progreso actual: `src/state/store.js` concentra las firmas estables y el histori
 
 ### 4. Extraer el dominio del fixture
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso.
 
-- Mover la generación automática de rondas y parejas.
-- Mover la lógica de cantidad de jugadores, canchas y descansos.
+- `[x]` Mover la generación automática de rondas y parejas.
+- `[x]` Mover la lógica de cantidad de jugadores, canchas y descansos.
 - Mover el agregado y eliminación independiente de rondas.
 - Mantener los reemplazos de jugadores por ronda o hacia el futuro.
 - Agregar tests para 4–16 jugadores y para rondas extra.
@@ -116,6 +116,8 @@ src/features/fixture/player-swaps.js
 ```
 
 Criterio de finalización: el fixture generado por la versión modular coincide con el actual para los mismos datos.
+
+Progreso actual: `src/features/fixture/generator.js` contiene la generación de rondas, descansos, canchas y parejas para todas las cantidades actuales de jugadores. `app.js` conserva sólo un adaptador para actualizar su estado; los controles de rondas y los reemplazos se extraerán en los próximos pasos.
 
 ### 5. Extraer resultados y estadísticas
 

@@ -1,6 +1,14 @@
 import { createStateStore } from './state/store.js';
 import { createDefaultState, normalizeState } from './state/model.js';
 import { createLocalStorageStore } from './services/local-storage.js';
+import {
+    createAutomaticRound as createFixtureRound,
+    generateSchedule as buildSchedule,
+    getCourts,
+    getNumRounds,
+    getPlayingCount,
+    getRestCount
+} from './features/fixture/generator.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -69,100 +77,16 @@ import { createLocalStorageStore } from './services/local-storage.js';
         return createDefaultState({ numPlayers: n }).players;
     }
 
-    function getCourts(n) {
-        return Math.min(MAX_COURTS, Math.floor(n / 4));
-    }
-
-    function getPlayingCount(n) {
-        return getCourts(n) * 4;
-    }
-
-    function getRestCount(n) {
-        return n - getPlayingCount(n);
-    }
-
-    function getNumRounds(n) {
-        const rest = getRestCount(n);
-        if (rest > 0) return n;
-        if (n === 4) return 3;
-        return Math.max(n - 1, 3);
-    }
-
-    function getActivePlayers(n, playingCount, round) {
-        const active = [];
-        for (let i = 0; i < playingCount; i++) {
-            active.push((round + i) % n);
-        }
-        return active;
-    }
-
-    function pairFour(active, round) {
-        const pairings = [
-            { t1: [0, 1], t2: [2, 3] },
-            { t1: [0, 2], t2: [1, 3] },
-            { t1: [0, 3], t2: [1, 2] }
-        ];
-        const p = pairings[round % pairings.length];
-        return {
-            court: 1,
-            t1_p1: active[p.t1[0]], t1_p2: active[p.t1[1]],
-            t2_p1: active[p.t2[0]], t2_p2: active[p.t2[1]],
-            score1: '', score2: ''
-        };
-    }
-
-    function pairEight(active) {
-        return [
-            {
-                court: 1,
-                t1_p1: active[0], t1_p2: active[7],
-                t2_p1: active[3], t2_p2: active[4],
-                score1: '', score2: ''
-            },
-            {
-                court: 2,
-                t1_p1: active[1], t1_p2: active[6],
-                t2_p1: active[2], t2_p2: active[5],
-                score1: '', score2: ''
-            }
-        ];
-    }
-
     function createAutomaticRound(roundIndex) {
-        if (numPlayers === 9) {
-            return {
-                id: roundIndex,
-                matches: [
-                    {
-                        court: 1,
-                        t1_p1: roundIndex % 9, t1_p2: (7 + roundIndex) % 9,
-                        t2_p1: (3 + roundIndex) % 9, t2_p2: (4 + roundIndex) % 9,
-                        score1: '', score2: ''
-                    },
-                    {
-                        court: 2,
-                        t1_p1: (1 + roundIndex) % 9, t1_p2: (6 + roundIndex) % 9,
-                        t2_p1: (2 + roundIndex) % 9, t2_p2: (5 + roundIndex) % 9,
-                        score1: '', score2: ''
-                    }
-                ]
-            };
-        }
-
-        const playingCount = getPlayingCount(numPlayers);
-        const active = getActivePlayers(numPlayers, playingCount, roundIndex);
-        const matches = playingCount >= 8
-            ? pairEight(active)
-            : playingCount >= 4
-                ? [pairFour(active, roundIndex)]
-                : [];
-        return { id: roundIndex, matches };
+        return createFixtureRound(numPlayers, roundIndex, MAX_COURTS);
     }
 
     function generateSchedule(roundCount = getNumRounds(numPlayers)) {
-        const rounds = Math.max(MIN_ROUNDS, Math.min(MAX_ROUNDS, roundCount));
-        schedule = Array.from({ length: rounds }, (_, roundIndex) =>
-            createAutomaticRound(roundIndex));
+        schedule = buildSchedule(numPlayers, roundCount, {
+            minRounds: MIN_ROUNDS,
+            maxRounds: MAX_ROUNDS,
+            maxCourts: MAX_COURTS
+        });
     }
 
     function addRound() {
