@@ -26,6 +26,15 @@ La versión pública está disponible en [sebasaversa.github.io/padel-torneo](ht
 
 Un link con `?torneo=<id>` es un torneo compartido en Firebase. Un link con `#s=...` contiene una copia local del estado y no sincroniza cambios.
 
+## Roles y permisos
+
+- **Super admin:** inicia con Google, administra cuentas de admins, ve todos los torneos y puede recuperar los eliminados.
+- **Admin:** inicia con email y contraseña; crea sus torneos y administra la configuración completa de los que creó o le asignaron.
+- **Participante:** entra por link, elige su jugador y sólo puede corregir parejas o cargar resultados en los partidos que juega.
+- **Espectador:** entra por link sin elegir jugador y consulta el torneo en modo lectura.
+
+Las operaciones de participantes se validan en Cloud Functions y las reglas de Realtime Database bloquean las escrituras directas no autorizadas.
+
 ## Desarrollo local
 
 ### Requisitos
@@ -50,11 +59,14 @@ Para ejecutar las pruebas y generar una build de producción:
 
 ```bash
 npm test
+npm run test:rules
 npm run build
 npm run preview
 ```
 
 La build se genera en `dist/`. No se debe abrir `index.html` directamente: Vite resuelve los módulos y assets durante desarrollo y build.
+
+`npm run test:rules` inicia temporalmente el emulador de Realtime Database y prueba los permisos de lectura, presencia, claims, resultados y administración.
 
 ## Arquitectura
 
@@ -83,11 +95,18 @@ tournaments/{tournamentId}/
   presence/{presenceId} Dispositivos conectados temporalmente
   claims/{playerId}     Jugador reclamado por un dispositivo
   history/{eventId}     Últimos cambios, actor, dispositivo y fecha
+  metadata              Propietario, admins asignados y borrado lógico
 ```
 
 La configuración pública del proyecto Firebase vive en `src/app.js`; las credenciales de cliente de Firebase no son secretas. La protección real depende de las reglas de Realtime Database y de Firebase Authentication. Si se reutiliza el proyecto para otro torneo, mantené habilitado el acceso anónimo y configurá reglas que permitan únicamente las operaciones necesarias sobre `tournaments/{tournamentId}`.
 
 Los nombres de jugadores, resultados, historial e información genérica del navegador (por ejemplo, plataforma y navegador) se almacenan en el torneo compartido. No se registra nombre real del dispositivo ni información de cuenta.
+
+### Recuperación operativa
+
+El email del super admin se conserva como secreto `SUPER_ADMIN_EMAIL` en Firebase Functions. Si hubiera que recuperar su permiso, esa misma cuenta inicia sesión con Google y la Function `bootstrapSuperAdmin` restaura su claim. Nunca se debe guardar ese email ni contraseñas en el repositorio.
+
+Los torneos se eliminan de forma lógica: el super admin puede restaurarlos desde el historial. Las contraseñas de admins se recuperan con el enlace que genera el panel **Usuarios**.
 
 ## Deploy
 

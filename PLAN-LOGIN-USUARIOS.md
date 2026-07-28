@@ -101,15 +101,15 @@ Propuesta: el super admin crea usuarios de tipo admin con email, contraseña tem
 
 ### 0. Planificación, respaldo y decisiones
 
-Estado: `[~]` En curso; quedan tres decisiones de producto antes de restringir permisos.
+Estado: `[x]` Completada.
 
 - `[x]` Documentar roles, permisos y alcance.
 - `[x]` Documentar la necesidad de Cloud Functions/Admin SDK para gestionar usuarios de manera segura.
 - `[x]` Proponer el modelo de datos compatible con torneos existentes.
 - `[x]` Confirmar el email de Google del super admin (guardado fuera del repositorio).
-- `[ ]` Confirmar el alcance exacto de edición de parejas por participantes.
-- `[ ]` Confirmar borrado lógico o físico de torneos.
-- `[ ]` Confirmar el procedimiento de contraseñas iniciales de admins.
+- `[x]` Confirmar el alcance exacto de edición de parejas por participantes (sólo sus propios partidos y sólo la ronda actual).
+- `[x]` Confirmar borrado lógico o físico de torneos (borrado lógico recuperable).
+- `[x]` Confirmar el procedimiento de contraseñas iniciales de admins (contraseña temporal y enlace de recuperación).
 - `[x]` Crear el tag de respaldo `pre-authentication-roles` previo a la implementación.
 
 Commit: `Add authentication and roles implementation plan`.
@@ -211,15 +211,15 @@ Commit: `Add authenticated presence and player claims`.
 
 ### 7. Reglas de Firebase y permisos de escritura
 
-Estado: `[ ]` Pendiente.
+Estado: `[x]` Completada.
 
-- `[ ]` Reemplazar la regla actual amplia (`auth != null`) por reglas por ruta y rol.
-- `[ ]` Permitir lectura de un torneo a participantes/espectadores autenticados anónimamente mediante el link.
-- `[ ]` Permitir configuración, fixture, jugadores, rondas, canchas, actividad y resultados completos a owner/admin/super admin.
-- `[ ]` Limitar resultados de participantes a sus partidos.
-- `[ ]` Limitar edición de parejas según la decisión de la etapa 0.
-- `[ ]` Restringir historial global, metadata, perfiles, presencia y usuarios a quienes corresponda.
-- `[ ]` Crear y ejecutar una matriz de pruebas con Firebase Rules Emulator.
+- `[x]` Reemplazar la regla actual amplia (`auth != null`) por reglas por ruta y rol.
+- `[x]` Permitir lectura de un torneo a participantes/espectadores autenticados anónimamente mediante el link.
+- `[x]` Permitir configuración, fixture, jugadores, rondas, canchas, actividad y resultados completos a owner/admin/super admin.
+- `[x]` Limitar resultados de participantes a sus partidos.
+- `[x]` Limitar edición de parejas según la decisión de la etapa 0.
+- `[x]` Restringir historial global, metadata, perfiles, presencia y usuarios a quienes corresponda.
+- `[x]` Crear y ejecutar una matriz de pruebas con Firebase Rules Emulator.
 
 Criterio de finalización: cada acción prohibida falla también al llamar directamente a Realtime Database, no sólo al ocultar un botón.
 
@@ -227,14 +227,14 @@ Commit: `Enforce tournament roles in Firebase rules`.
 
 ### 8. Interfaz de permisos dentro del torneo
 
-Estado: `[ ]` Pendiente.
+Estado: `[x]` Completada.
 
-- `[ ]` Ocultar o deshabilitar controles según rol y explicar brevemente el motivo.
-- `[ ]` Añadir selector de entrada “Jugar como…” / “Entrar como espectador”.
-- `[ ]` Mostrar claramente qué jugador tiene asignado el participante.
-- `[ ]` Limitar controles de resultados y parejas a los partidos permitidos.
-- `[ ]` Añadir panel de personas conectadas para admins.
-- `[ ]` Mantener controles táctiles y modales cómodos en celular.
+- `[x]` Ocultar o deshabilitar controles según rol y explicar brevemente el motivo.
+- `[x]` Añadir selector de entrada “Jugar como…” / “Entrar como espectador”.
+- `[x]` Mostrar claramente qué jugador tiene asignado el participante.
+- `[x]` Limitar controles de resultados y parejas a los partidos permitidos.
+- `[x]` Añadir panel de personas conectadas para admins.
+- `[x]` Mantener controles táctiles y modales cómodos en celular.
 
 Criterio de finalización: cada rol entiende qué puede hacer sin depender de mensajes de error.
 
