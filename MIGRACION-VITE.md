@@ -69,12 +69,12 @@ Estado: `[x]` Completada.
 - `[x]` Mover los estilos a `src/styles.css`.
 - `[x]` Mantener separados los estilos base, layout, controles, rondas, modales y vista móvil.
 - `[x]` Mantener el comportamiento funcional existente después de la extracción.
-- `[ ]` Completar una prueba visual responsive específica de esta etapa.
-- `[ ]` Reemplazar los handlers inline por listeners explícitos desde módulos de UI.
+- `[x]` Completar una prueba visual responsive específica de esta etapa.
+- `[x]` Reemplazar los handlers inline por listeners explícitos desde módulos de UI.
 
 Criterio de finalización: la interfaz se ve igual en escritorio y celular, sin lógica de negocio dentro del HTML.
 
-Progreso actual: Vite transforma `src/styles.css` y `src/app.js` en assets optimizados dentro de `dist/assets/`. La compatibilidad con los handlers inline es temporal y se eliminará al extraer los componentes de UI.
+Progreso final: Vite transforma `src/styles.css` y los módulos de la aplicación en assets optimizados dentro de `dist/assets/`. La interfaz ya no usa handlers inline: los listeners están enlazados desde los módulos de UI. La visualización responsive también fue validada en un viewport de celular de 390 px, sin desborde horizontal y con controles táctiles de al menos 44 px.
 
 ### 3. Crear el núcleo de estado
 
