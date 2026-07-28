@@ -152,7 +152,7 @@ Estado: `[ ]` Pendiente.
 
 - `[ ]` Crear pantalla/modal de sesión para Google, email/contraseña y cerrar sesión.
 - `[ ]` Mantener entrada por link como espectador sin exigir una cuenta.
-- `[ ]` Conservar y migrar la sesión anónima cuando corresponda.
+- `[x]` Preparar una sesión que conserva cuentas existentes y usa identidad anónima sólo cuando corresponda.
 - `[ ]` Mostrar nombre, rol y estado de sesión en la interfaz.
 - `[ ]` Manejar errores de credenciales sin revelar información sensible.
 - `[ ]` Agregar flujo de recuperación de contraseña para admins.

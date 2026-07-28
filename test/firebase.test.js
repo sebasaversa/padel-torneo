@@ -25,6 +25,27 @@ test('inicializa Firebase una sola vez y reutiliza la base', async () => {
     assert.equal(client.serverTimestamp(), 'timestamp');
 });
 
+test('mantiene una sesión existente en lugar de reemplazarla por una anónima', async () => {
+    let signedInAnonymously = 0;
+    const signedInUser = { uid: 'admin-1' };
+    const auth = {
+        currentUser: signedInUser,
+        signInAnonymously: async () => { signedInAnonymously += 1; }
+    };
+    const firebase = {
+        apps: [],
+        initializeApp: () => { firebase.apps.push({}); },
+        auth: () => auth,
+        database: () => ({})
+    };
+    firebase.database.ServerValue = { TIMESTAMP: 'timestamp' };
+
+    const client = createFirebaseClient({ firebase, config: { projectId: 'test' } });
+    await client.getDatabase();
+    assert.equal(client.getAuth(), auth);
+    assert.equal(signedInAnonymously, 0);
+});
+
 test('sincroniza estado remoto y guarda el estado local', async () => {
     let stateListener;
     let savedPayload;
