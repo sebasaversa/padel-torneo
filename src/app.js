@@ -32,6 +32,7 @@ import {
 } from './services/sharing.js';
 import { renderPlayerList } from './ui/components/player-list.js';
 import { renderLeaderboard } from './ui/components/leaderboard.js';
+import { renderRoundCards } from './ui/components/round-card.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -805,15 +806,6 @@ import { renderLeaderboard } from './ui/components/leaderboard.js';
         });
     }
 
-    function buildSelect(playerIndex, roundIdx, matchIdx, role) {
-        let html = `<select onchange="updateMatchPlayer(${roundIdx}, ${matchIdx}, '${role}', this.value)">`;
-        tournamentState.value.players.forEach((p, idx) => {
-            html += `<option value="${idx}" ${idx === playerIndex ? 'selected' : ''}>${p}</option>`;
-        });
-        html += '</select>';
-        return html;
-    }
-
     function askPlayerChange(previousPlayer, selectedPlayer) {
         const modal = document.getElementById('player-change-modal');
         document.getElementById('player-change-description').textContent =
@@ -910,72 +902,19 @@ import { renderLeaderboard } from './ui/components/leaderboard.js';
 
     function renderRounds() {
         const container = document.getElementById('rounds-container');
-        container.innerHTML = '';
-
-        tournamentState.value.schedule.forEach((round, rIdx) => {
-            const done = isRoundDone(round);
-            const collapsed = tournamentState.value.collapsedRounds[rIdx] === true;
-            const resting = getRestingPlayers(round);
-            const restLabel = resting.length === 0
-                ? 'Todos juegan'
-                : resting.length === 1
-                    ? `Descansa: ${resting[0]}`
-                    : `Descansan: ${resting.join(', ')}`;
-
-            let html = `<div class="card round-card ${done ? 'round-done' : ''}">
-                <div class="round-header" onclick="toggleRound(${rIdx})">
-                    <h3>Ronda ${rIdx + 1}</h3>
-                    <span class="chevron">${collapsed ? '▶ Mostrar' : '▼ Ocultar'}</span>
-                </div>
-                <div class="round-body ${collapsed ? 'collapsed' : ''}">
-                    <div class="rest-badge">💤 ${restLabel}</div>`;
-
-            round.matches.forEach((m, mIdx) => {
-                const mDone = isMatchDone(m);
-                const scoreWarning = getScoreWarning(m, tournamentState.value.gamesPerSet);
-                html += `
-                <div class="match ${mDone ? 'match-done' : ''}">
-                    <div class="court-title">📍 Cancha ${m.court}</div>
-                    <div class="team team-one">
-                        <div class="team-pair">
-                            ${buildSelect(m.t1_p1, rIdx, mIdx, 't1_p1')}
-                            ${buildSelect(m.t1_p2, rIdx, mIdx, 't1_p2')}
-                        </div>
-                    </div>
-                    <div class="vs">CONTRA</div>
-                    <div class="team team-two">
-                        <div class="team-pair">
-                            ${buildSelect(m.t2_p1, rIdx, mIdx, 't2_p1')}
-                            ${buildSelect(m.t2_p2, rIdx, mIdx, 't2_p2')}
-                        </div>
-                    </div>
-                    <div class="score-row">
-                        <div class="score-control team-one">
-                            <button type="button" class="score-adjust" aria-label="Bajar puntaje del primer equipo en cancha ${m.court}"
-                                    onclick="adjustScore(${rIdx}, ${mIdx}, 'score1', -1)">−</button>
-                            <input type="number" min="0" max="${tournamentState.value.gamesPerSet}" class="score-input" placeholder="0"
-                                   value="${m.score1}" inputmode="numeric"
-                                   onchange="updateScore(${rIdx}, ${mIdx}, 'score1', this.value)">
-                            <button type="button" class="score-adjust" aria-label="Subir puntaje del primer equipo en cancha ${m.court}"
-                                    onclick="adjustScore(${rIdx}, ${mIdx}, 'score1', 1)">+</button>
-                        </div>
-                        <span class="score-sep">—</span>
-                        <div class="score-control team-two">
-                            <button type="button" class="score-adjust" aria-label="Bajar puntaje del segundo equipo en cancha ${m.court}"
-                                    onclick="adjustScore(${rIdx}, ${mIdx}, 'score2', -1)">−</button>
-                            <input type="number" min="0" max="${tournamentState.value.gamesPerSet}" class="score-input" placeholder="0"
-                                   value="${m.score2}" inputmode="numeric"
-                                   onchange="updateScore(${rIdx}, ${mIdx}, 'score2', this.value)">
-                            <button type="button" class="score-adjust" aria-label="Subir puntaje del segundo equipo en cancha ${m.court}"
-                                    onclick="adjustScore(${rIdx}, ${mIdx}, 'score2', 1)">+</button>
-                        </div>
-                    </div>
-                    ${scoreWarning ? `<div class="score-warning">⚠️ ${scoreWarning}</div>` : ''}
-                </div>`;
-            });
-
-            html += '</div></div>';
-            container.innerHTML += html;
+        renderRoundCards(container, {
+            schedule: tournamentState.value.schedule,
+            players: tournamentState.value.players,
+            gamesPerSet: tournamentState.value.gamesPerSet,
+            collapsedRounds: tournamentState.value.collapsedRounds,
+            getRestingPlayers,
+            isMatchDone,
+            isRoundDone,
+            getScoreWarning,
+            onToggleRound: toggleRound,
+            onUpdatePlayer: updateMatchPlayer,
+            onAdjustScore: adjustScore,
+            onUpdateScore: updateScore
         });
     }
 
