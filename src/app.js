@@ -1250,6 +1250,23 @@ import { createAppController } from './app/app-controller.js';
             renderRounds();
             return;
         }
+        if (tournamentId && !['admin', 'superAdmin'].includes(sessionRole)) {
+            if (scope === 'future') {
+                showToast('Como jugador sólo podés corregir la ronda actual.');
+                renderRounds();
+                return;
+            }
+            try {
+                await firebaseClient.callFunction('updateParticipantPairing', {
+                    tournamentId, roundIndex: roundIdx, matchIndex: matchIdx, role, playerId: selectedPlayer
+                }, { allowAnonymous: true });
+            } catch (error) {
+                console.error(error);
+                showToast(error.message || 'No se pudo corregir esa pareja.');
+                renderRounds();
+            }
+            return;
+        }
         if (scope === 'future') {
             if (hasRecordedScoresFromRound(tournamentState.value.schedule, roundIdx, isMatchDone)) {
                 renderRounds();

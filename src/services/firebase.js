@@ -42,9 +42,9 @@ export function createFirebaseClient({ firebase, config, fetchFn = globalThis.fe
             return database;
         },
         getAuth,
-        async callFunction(name, data = null) {
+        async callFunction(name, data = null, { allowAnonymous = false } = {}) {
             const auth = getAuth();
-            if (!auth.currentUser || auth.currentUser.isAnonymous) throw new Error('Necesitás iniciar sesión para continuar.');
+            if (!auth.currentUser || (auth.currentUser.isAnonymous && !allowAnonymous)) throw new Error('Necesitás iniciar sesión para continuar.');
             const token = await auth.currentUser.getIdToken();
             const response = await fetchFn(`https://us-central1-${config.projectId}.cloudfunctions.net/${name}`, {
                 method: 'POST',
