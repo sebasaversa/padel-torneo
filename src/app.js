@@ -1303,7 +1303,9 @@ import { createAppController } from './app/app-controller.js';
         const nextScore = normalizeScore(value, tournamentState.value.gamesPerSet);
         if (tournamentState.value.schedule[roundIdx].matches[matchIdx][team] === nextScore) return;
         if (tournamentId && !['admin', 'superAdmin'].includes(sessionRole)) {
-            tournamentRef?.child(`state/schedule/${roundIdx}/matches/${matchIdx}/${team}`).set(nextScore)
+            firebaseClient.callFunction('updateParticipantScore', {
+                tournamentId, roundIndex: roundIdx, matchIndex: matchIdx, team, score: nextScore
+            }, { allowAnonymous: true })
                 .catch(error => {
                     console.error(error);
                     showToast('Sólo podés cargar resultados de los partidos que jugás.');

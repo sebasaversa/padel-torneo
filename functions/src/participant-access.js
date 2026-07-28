@@ -29,3 +29,23 @@ export function applyParticipantPairing(state, request, uid, claims = {}) {
     if (new Set(allPlayers).size !== allPlayers.length) throw new Error('El cambio duplicaría un jugador en la ronda.');
     return state;
 }
+
+export function normalizeScoreRequest(data = {}) {
+    const { tournamentId, roundIndex, matchIndex, team, score } = data;
+    if (typeof tournamentId !== 'string' || !/^[a-zA-Z0-9_-]{8,}$/.test(tournamentId)) throw new Error('El torneo no es válido.');
+    if (!Number.isInteger(roundIndex) || !Number.isInteger(matchIndex) || !['score1', 'score2'].includes(team)) {
+        throw new Error('El resultado no es válido.');
+    }
+    if (score !== '' && (!Number.isInteger(score) || score < 0 || score > 20)) throw new Error('El puntaje no es válido.');
+    return { tournamentId, roundIndex, matchIndex, team, score };
+}
+
+export function applyParticipantScore(state, request, uid, claims = {}) {
+    const match = state?.schedule?.[request.roundIndex]?.matches?.[request.matchIndex];
+    if (!match) throw new Error('El partido no existe.');
+    const playsMatch = PLAYER_ROLES.some(role => claims?.[match[role]]?.uid === uid);
+    if (!playsMatch) throw new Error('Sólo podés cargar resultados de tus propios partidos.');
+    if (request.score !== '' && request.score > state.gamesPerSet) throw new Error('El puntaje supera los games del set.');
+    match[request.team] = request.score;
+    return state;
+}

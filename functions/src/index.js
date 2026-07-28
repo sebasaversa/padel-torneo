@@ -11,7 +11,7 @@ import {
 } from './admin-users.js';
 import { getSuperAdminAuthorization, isAdminAccount } from './authorization.js';
 import { buildTournamentDeletion, requireTournamentId } from './tournament-admin.js';
-import { applyParticipantPairing, normalizePairingRequest } from './participant-access.js';
+import { applyParticipantPairing, applyParticipantScore, normalizePairingRequest, normalizeScoreRequest } from './participant-access.js';
 import { buildSuperAdminProfile, isConfiguredSuperAdmin } from './super-admin.js';
 
 if (!getApps().length) initializeApp();
@@ -186,6 +186,22 @@ export const updateParticipantPairing = onCall(async request => {
         if (!result.committed) throw new Error('No se pudo guardar el cambio.');
     } catch (error) {
         throw new HttpsError('permission-denied', error.message || 'No se pudo corregir la pareja.');
+    }
+    return { updated: true };
+});
+
+export const updateParticipantScore = onCall(async request => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Ingresá al torneo para continuar.');
+    let change;
+    try { change = normalizeScoreRequest(request.data); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
+    const database = getDatabase();
+    const claims = (await database.ref(`tournaments/${change.tournamentId}/claims`).get()).val() || {};
+    const stateRef = database.ref(`tournaments/${change.tournamentId}/state`);
+    try {
+        const result = await stateRef.transaction(state => applyParticipantScore(state, change, request.auth.uid, claims));
+        if (!result.committed) throw new Error('No se pudo guardar el resultado.');
+    } catch (error) {
+        throw new HttpsError('permission-denied', error.message || 'No se pudo cargar el resultado.');
     }
     return { updated: true };
 });
