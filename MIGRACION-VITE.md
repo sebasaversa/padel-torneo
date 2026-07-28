@@ -70,6 +70,7 @@ Estado: `[~]` En curso.
 - `[x]` Mantener separados los estilos base, layout, controles, rondas, modales y vista móvil.
 - `[x]` Mantener el comportamiento funcional existente después de la extracción.
 - `[ ]` Completar una prueba visual responsive específica de esta etapa.
+- `[ ]` Reemplazar los handlers inline por listeners explícitos desde módulos de UI.
 
 Criterio de finalización: la interfaz se ve igual en escritorio y celular, sin lógica de negocio dentro del HTML.
 
@@ -90,6 +91,7 @@ Estructura prevista:
 
 ```text
 src/state/store.js
+src/state/model.js
 src/services/local-storage.js
 ```
 
