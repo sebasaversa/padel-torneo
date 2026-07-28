@@ -20,6 +20,18 @@ function requireSuperAdmin(request) {
     if (request.auth.token.platformRole !== 'superAdmin') {
         throw new HttpsError('permission-denied', 'Sólo el super admin puede administrar usuarios.');
     }
+    return request.auth;
+}
+
+async function logAdminActivity(auth, action, targetUid, details = {}) {
+    await getDatabase().ref('adminActivity').push({
+        action,
+        targetUid,
+        actorUid: auth.uid,
+        actorEmail: auth.token.email || '',
+        ...details,
+        createdAt: ServerValue.TIMESTAMP
+    });
 }
 
 async function saveAdminProfile(uid, user, currentProfile = {}) {
@@ -65,7 +77,7 @@ export const bootstrapSuperAdmin = onCall({ secrets: [superAdminEmail] }, async 
 });
 
 export const createAdminUser = onCall(async request => {
-    requireSuperAdmin(request);
+    const auth = requireSuperAdmin(request);
     let data;
     try {
         data = normalizeAdminCreation(request.data);
@@ -75,11 +87,12 @@ export const createAdminUser = onCall(async request => {
     const user = await getAuth().createUser(data);
     await getAuth().setCustomUserClaims(user.uid, { platformRole: 'admin' });
     await saveAdminProfile(user.uid, data);
+    await logAdminActivity(auth, 'createAdmin', user.uid, { email: data.email });
     return serializeUserRecord(await getAuth().getUser(user.uid));
 });
 
 export const updateAdminUser = onCall(async request => {
-    requireSuperAdmin(request);
+    const auth = requireSuperAdmin(request);
     const uid = typeof request.data?.uid === 'string' ? request.data.uid : '';
     if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
     let updates;
@@ -90,11 +103,12 @@ export const updateAdminUser = onCall(async request => {
     }
     const user = await getAuth().updateUser(uid, updates);
     await saveAdminProfile(uid, user);
+    await logAdminActivity(auth, 'updateAdmin', uid, { fields: Object.keys(updates) });
     return serializeUserRecord(await getAuth().getUser(uid));
 });
 
 export const deleteAdminUser = onCall(async request => {
-    requireSuperAdmin(request);
+    const auth = requireSuperAdmin(request);
     const uid = typeof request.data?.uid === 'string' ? request.data.uid : '';
     if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
     if (uid === request.auth.uid) throw new HttpsError('failed-precondition', 'No podés eliminar tu propia cuenta.');
@@ -104,6 +118,7 @@ export const deleteAdminUser = onCall(async request => {
     }
     await getAuth().deleteUser(uid);
     await getDatabase().ref(`userProfiles/${uid}`).remove();
+    await logAdminActivity(auth, 'deleteAdmin', uid, { email: user.email || '' });
     return { deleted: true };
 });
 
@@ -113,4 +128,17 @@ export const listAdminUsers = onCall(async request => {
     return result.users
         .filter(user => user.customClaims?.platformRole === 'admin')
         .map(serializeUserRecord);
+});
+
+export const generateAdminPasswordResetLink = onCall(async request => {
+    const auth = requireSuperAdmin(request);
+    const uid = typeof request.data?.uid === 'string' ? request.data.uid : '';
+    if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
+    const user = await getAuth().getUser(uid);
+    if (user.customClaims?.platformRole !== 'admin') {
+        throw new HttpsError('permission-denied', 'Sólo se pueden recuperar cuentas de admin.');
+    }
+    const link = await getAuth().generatePasswordResetLink(user.email);
+    await logAdminActivity(auth, 'generatePasswordResetLink', uid, { email: user.email || '' });
+    return { email: user.email, link };
 });
