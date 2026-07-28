@@ -23,6 +23,13 @@ import { createFirebaseClient } from './services/firebase.js';
 import { createTournamentSync } from './services/tournament-sync.js';
 import { createTournamentIdentity } from './services/identity.js';
 import { createActivityLog } from './services/activity.js';
+import {
+    createSharedTournamentUrl,
+    createStandaloneShareUrl,
+    decodeState,
+    exportStateJSON,
+    importStateJSON
+} from './services/sharing.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -670,21 +677,13 @@ import { createActivityLog } from './services/activity.js';
     }
 
     function copyTournamentLink() {
-        const url = `${location.origin}${location.pathname}?torneo=${tournamentId}`;
+        const url = createSharedTournamentUrl(location.origin, location.pathname, tournamentId);
         navigator.clipboard.writeText(url).then(() => showToast('¡Link copiado! Todos verán los cambios al instante.'))
             .catch(() => prompt('Copiá este link:', url));
     }
 
     function loadLocal() {
         return localStateStore.load();
-    }
-
-    function encodeState(state) {
-        return btoa(unescape(encodeURIComponent(JSON.stringify(state))));
-    }
-
-    function decodeState(encoded) {
-        return JSON.parse(decodeURIComponent(escape(atob(encoded))));
     }
 
     function loadFromHash() {
@@ -710,18 +709,17 @@ import { createActivityLog } from './services/activity.js';
             copyTournamentLink();
             return;
         }
-        const encoded = encodeState(getState());
-        const url = location.origin + location.pathname + '#s=' + encoded;
+        const url = createStandaloneShareUrl(location.origin, location.pathname, getState());
         navigator.clipboard.writeText(url).then(() => {
             showToast('¡Link copiado! Mandalo al grupo.');
         }).catch(() => {
             prompt('Copiá este link:', url);
         });
-        history.replaceState(null, '', '#s=' + encoded);
+        history.replaceState(null, '', url);
     }
 
     function exportJSON() {
-        const blob = new Blob([JSON.stringify(getState(), null, 2)], { type: 'application/json' });
+        const blob = new Blob([exportStateJSON(getState())], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = 'torneo-padel.json';
@@ -740,7 +738,7 @@ import { createActivityLog } from './services/activity.js';
         reader.onload = (ev) => {
             try {
                 rememberStateForUndo();
-                setState(JSON.parse(ev.target.result));
+                setState(importStateJSON(ev.target.result));
                 saveLocal();
                 logActivity('importó un archivo del torneo');
                 showToast('Datos importados');

@@ -146,13 +146,13 @@ Progreso final: `src/features/scoring/` concentra límites, validaciones, tabla 
 
 ### 6. Extraer servicios externos
 
-Estado: `[~]` En curso.
+Estado: `[x]` Completa.
 
 - `[x]` Encapsular inicialización y autenticación anónima de Firebase.
 - `[x]` Encapsular sincronización del estado compartido.
 - `[x]` Encapsular presencia y claims de identidad.
 - `[x]` Encapsular historial de actividad.
-- Encapsular links compartidos y exportación/importación.
+- `[x]` Encapsular links compartidos y exportación/importación.
 - Mantener sin cambios las rutas existentes de Firebase.
 
 Estructura prevista:
@@ -166,6 +166,8 @@ src/services/sharing.js
 ```
 
 Criterio de finalización: un torneo creado con la versión actual puede abrirse, editarse y sincronizarse con la versión modular.
+
+Progreso final: Firebase, sincronización de estado, presencia, identidad, historial y utilidades de compartir viven en módulos de `src/services/`. Las rutas de Firebase y el formato de links existentes se conservan.
 
 ### 7. Extraer la interfaz
 
