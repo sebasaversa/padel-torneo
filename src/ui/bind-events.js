@@ -31,6 +31,13 @@ export function bindStaticUIEvents(actions) {
     click('close-activity', actions.closeActivityModal);
     document.getElementById('player-count')?.addEventListener('change', event => actions.setPlayerCount(parseInt(event.target.value, 10)));
     document.getElementById('round-count')?.addEventListener('change', event => actions.setRoundCount(parseInt(event.target.value, 10)));
+    document.getElementById('round-count')?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        actions.setRoundCount(parseInt(event.target.value, 10));
+        event.target.blur();
+    });
+    document.getElementById('court-count')?.addEventListener('change', event => actions.setCourtCount(parseInt(event.target.value, 10)));
     document.getElementById('games-per-set')?.addEventListener('input', event => actions.setGamesPerSet(parseInt(event.target.value, 10)));
     document.getElementById('tournament-name-input')?.addEventListener('keydown', event => {
         if (event.key === 'Enter') actions.confirmTournamentName();

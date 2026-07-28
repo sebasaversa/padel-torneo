@@ -61,6 +61,16 @@
             <span class="count-hint" id="round-count-hint"></span>
         </div>
         <div class="player-count-row">
+            <label for="court-count">Canchas:</label>
+            <div class="count-controls">
+                <select id="court-count" aria-describedby="court-count-hint">
+                    <option value="1">1 cancha</option>
+                    <option value="2" selected>2 canchas</option>
+                </select>
+            </div>
+            <span class="count-hint" id="court-count-hint"></span>
+        </div>
+        <div class="player-count-row">
             <label for="games-per-set">Games por set:</label>
             <div class="count-controls">
                 <button class="btn btn-secondary btn-sm" id="games-decrease" aria-label="Reducir games por set">−</button>

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { generateSchedule, getNumRounds } from '../src/features/fixture/generator.js';
+import { generateSchedule, getCourts, getNumRounds } from '../src/features/fixture/generator.js';
 import { resizeRounds } from '../src/features/fixture/rounds.js';
 import { applySingleRoundPlayerChange, swapPlayersInRound } from '../src/features/fixture/player-swaps.js';
 
@@ -36,6 +36,20 @@ test('agrega y quita rondas sin perder el estado de las rondas existentes', () =
     const reduced = resizeRounds({ ...expanded, targetCount: 1, createRound });
     assert.equal(reduced.schedule.length, 1);
     assert.deepEqual(reduced.collapsedRounds, { 0: true });
+});
+
+test('respeta la cantidad seleccionada de canchas al generar el fixture', () => {
+    const oneCourt = generateSchedule(9, undefined, { maxCourts: 1 });
+    assert.equal(getCourts(9, 1), 1);
+    assert.equal(oneCourt.length, getNumRounds(9, 1));
+    oneCourt.forEach(round => assert.equal(round.matches.length, 1));
+
+    const twoCourts = generateSchedule(9, undefined, { maxCourts: 2 });
+    assert.equal(getCourts(9, 2), 2);
+    twoCourts.forEach(round => assert.equal(round.matches.length, 2));
+
+    const limitedByPlayers = generateSchedule(7, undefined, { maxCourts: 2 });
+    limitedByPlayers.forEach(round => assert.equal(round.matches.length, 1));
 });
 
 test('los reemplazos mantienen jugadores únicos dentro de una ronda', () => {

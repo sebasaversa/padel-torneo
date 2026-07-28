@@ -11,6 +11,7 @@ test('normaliza estados de torneos anteriores sin campos nuevos', () => {
     };
     const state = normalizeState(legacy);
     assert.equal(state.numPlayers, 4);
+    assert.equal(state.numCourts, 1);
     assert.equal(state.gamesPerSet, 6);
     assert.deepEqual(state.collapsedRounds, {});
     assert.equal(state.tournamentName, '');
@@ -18,8 +19,10 @@ test('normaliza estados de torneos anteriores sin campos nuevos', () => {
 });
 
 test('crea un estado inicial completo y limita games inválidos', () => {
-    const initial = createDefaultState({ numPlayers: 5, gamesPerSet: 3 });
+    const initial = createDefaultState({ numPlayers: 5, numCourts: 1, gamesPerSet: 3 });
     assert.equal(initial.players.length, 5);
+    assert.equal(initial.numCourts, 1);
     assert.equal(initial.gamesPerSet, 3);
     assert.equal(normalizeState({ players: ['Ana'], gamesPerSet: 99 }, { maxGamesPerSet: 20 }).gamesPerSet, 20);
+    assert.equal(normalizeState({ players: Array.from({ length: 9 }), numCourts: 4 }).numCourts, 2);
 });

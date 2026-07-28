@@ -94,14 +94,14 @@ import { createAppController } from './app/app-controller.js';
     }
 
     function createAutomaticRound(roundIndex) {
-        return createFixtureRound(tournamentState.value.numPlayers, roundIndex, MAX_COURTS);
+        return createFixtureRound(tournamentState.value.numPlayers, roundIndex, tournamentState.value.numCourts);
     }
 
-    function generateSchedule(roundCount = getNumRounds(tournamentState.value.numPlayers)) {
+    function generateSchedule(roundCount = getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts)) {
         tournamentState.value.schedule = buildSchedule(tournamentState.value.numPlayers, roundCount, {
             minRounds: MIN_ROUNDS,
             maxRounds: MAX_ROUNDS,
-            maxCourts: MAX_COURTS
+            maxCourts: tournamentState.value.numCourts
         });
     }
 
@@ -129,11 +129,12 @@ import { createAppController } from './app/app-controller.js';
     }
 
     function updateSubtitle() {
-        const courts = getCourts(tournamentState.value.numPlayers);
-        const rest = getRestCount(tournamentState.value.numPlayers);
-        const rounds = tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers);
-        const plannedRounds = getNumRounds(tournamentState.value.numPlayers);
-        renderTournamentToolbar({ tournamentId, tournamentName: tournamentState.value.tournamentName, tournamentDate: tournamentState.value.tournamentDate, formattedDate: formatTournamentDate(tournamentState.value.tournamentDate), numPlayers: tournamentState.value.numPlayers, gamesPerSet: tournamentState.value.gamesPerSet, scheduleLength: rounds, courts, rest, plannedRounds });
+        const courts = getCourts(tournamentState.value.numPlayers, tournamentState.value.numCourts);
+        const rest = getRestCount(tournamentState.value.numPlayers, tournamentState.value.numCourts);
+        const rounds = tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts);
+        const plannedRounds = getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts);
+        const availableCourts = Math.min(MAX_COURTS, Math.floor(tournamentState.value.numPlayers / 4));
+        renderTournamentToolbar({ tournamentId, tournamentName: tournamentState.value.tournamentName, tournamentDate: tournamentState.value.tournamentDate, formattedDate: formatTournamentDate(tournamentState.value.tournamentDate), numPlayers: tournamentState.value.numPlayers, gamesPerSet: tournamentState.value.gamesPerSet, scheduleLength: rounds, courts, rest, plannedRounds, availableCourts });
     }
 
     function resizePlayers(newCount) {
@@ -152,6 +153,32 @@ import { createAppController } from './app/app-controller.js';
 
     function changeRoundCount(delta) {
         setRoundCount(tournamentState.value.schedule.length + delta);
+    }
+
+    function setCourtCount(newCount) {
+        if (Number.isNaN(newCount)) return;
+        const maxAvailableCourts = Math.min(MAX_COURTS, Math.floor(tournamentState.value.numPlayers / 4));
+        newCount = Math.max(1, Math.min(maxAvailableCourts, newCount));
+        if (newCount === tournamentState.value.numCourts) {
+            document.getElementById('court-count').value = tournamentState.value.numCourts;
+            return;
+        }
+
+        const hasScores = tournamentState.value.schedule.some(round => round.matches.some(match => match.score1 !== '' || match.score2 !== ''));
+        if (hasScores && !confirm(`¿Usar ${newCount} cancha${newCount === 1 ? '' : 's'}? Se regenerará el fixture y se pierden los resultados.`)) {
+            document.getElementById('court-count').value = tournamentState.value.numCourts;
+            return;
+        }
+
+        rememberStateForUndo();
+        const currentRoundCount = tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts);
+        tournamentState.value.numCourts = newCount;
+        generateSchedule(currentRoundCount);
+        tournamentState.value.collapsedRounds = {};
+        saveLocal();
+        logActivity(`cambió la cantidad de canchas a ${newCount}`);
+        renderAll();
+        showToast(`${newCount} cancha${newCount === 1 ? '' : 's'} · fixture actualizado`);
     }
 
     function changeGamesPerSet(delta) {
@@ -194,8 +221,9 @@ import { createAppController } from './app/app-controller.js';
         }
 
         rememberStateForUndo();
-        const currentRoundCount = tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers);
+        const currentRoundCount = tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts);
         resizePlayers(newCount);
+        tournamentState.value.numCourts = Math.min(tournamentState.value.numCourts, Math.floor(newCount / 4));
         generateSchedule(currentRoundCount);
         tournamentState.value.collapsedRounds = {};
         saveLocal();
@@ -281,11 +309,13 @@ import { createAppController } from './app/app-controller.js';
 
     function setState(state) {
         const normalized = normalizeState({ ...getState(), ...state }, {
+            maxCourts: MAX_COURTS,
             minGamesPerSet: MIN_GAMES_PER_SET,
             maxGamesPerSet: MAX_GAMES_PER_SET
         });
         tournamentState.replace(normalized);
         document.getElementById('player-count').value = tournamentState.value.numPlayers;
+        document.getElementById('court-count').value = tournamentState.value.numCourts;
         document.getElementById('games-per-set').value = tournamentState.value.gamesPerSet;
         renderAll();
     }
@@ -632,7 +662,7 @@ import { createAppController } from './app/app-controller.js';
             tournamentState.value.tournamentDate = getTodayISODate();
 
             // Un torneo nuevo conserva la configuración, pero siempre empieza sin resultados.
-            generateSchedule(tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers));
+            generateSchedule(tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts));
             tournamentState.value.collapsedRounds = {};
             const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
             tournamentId = id;
@@ -726,7 +756,7 @@ import { createAppController } from './app/app-controller.js';
         if (!confirm('¿Regenerar el fixture? Se pierden los resultados pero se mantienen los nombres.')) return;
         rememberStateForUndo();
         const savedPlayers = [...tournamentState.value.players];
-        generateSchedule(tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers));
+        generateSchedule(tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts));
         tournamentState.value.players = savedPlayers;
         tournamentState.value.collapsedRounds = {};
         saveLocal();
@@ -739,11 +769,13 @@ import { createAppController } from './app/app-controller.js';
         if (!confirm('¿Borrar todo (nombres y resultados)?')) return;
         rememberStateForUndo();
         tournamentState.value.numPlayers = 9;
+        tournamentState.value.numCourts = 2;
         tournamentState.value.gamesPerSet = 4;
         tournamentState.value.players = defaultPlayers(tournamentState.value.numPlayers);
         generateSchedule();
         tournamentState.value.collapsedRounds = {};
         document.getElementById('player-count').value = tournamentState.value.numPlayers;
+        document.getElementById('court-count').value = tournamentState.value.numCourts;
         document.getElementById('games-per-set').value = tournamentState.value.gamesPerSet;
         if (tournamentId) saveLocal();
         else {
@@ -981,7 +1013,7 @@ import { createAppController } from './app/app-controller.js';
     confirmIdentitySelection, confirmPlayerChange, confirmTournamentName,
     continueIdentitySelection, copyTournamentSummary, createSharedTournament,
     enterAsSpectator, exportJSON, importJSON, openActivityModal, openSummaryModal,
-    resetAll, resetSchedule, setGamesPerSet, setPlayerCount, setRoundCount,
+    resetAll, resetSchedule, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
     shareState, shareTournamentSummary, showIdentityChoice, undoLastChange
     });
     }

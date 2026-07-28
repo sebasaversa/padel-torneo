@@ -1,6 +1,7 @@
-export function createDefaultState({ numPlayers = 9, gamesPerSet = 4 } = {}) {
+export function createDefaultState({ numPlayers = 9, numCourts = 2, gamesPerSet = 4 } = {}) {
     return {
         numPlayers,
+        numCourts,
         gamesPerSet,
         players: Array.from({ length: numPlayers }, (_, index) => `Jugador ${index + 1}`),
         schedule: [],
@@ -11,17 +12,26 @@ export function createDefaultState({ numPlayers = 9, gamesPerSet = 4 } = {}) {
 }
 
 export function normalizeState(state = {}, {
+    minCourts = 1,
+    maxCourts = 2,
     minGamesPerSet = 1,
     maxGamesPerSet = 20
 } = {}) {
     const players = Array.isArray(state.players) ? state.players : [];
+    const numPlayers = state.numPlayers || players.length;
+    const parsedCourts = parseInt(state.numCourts, 10);
+    const availableCourts = Math.max(minCourts, Math.min(maxCourts, Math.floor(numPlayers / 4)));
+    const numCourts = Number.isNaN(parsedCourts)
+        ? availableCourts
+        : Math.max(minCourts, Math.min(availableCourts, parsedCourts));
     const parsedGames = parseInt(state.gamesPerSet, 10);
     const gamesPerSet = Number.isNaN(parsedGames)
         ? 4
         : Math.max(minGamesPerSet, Math.min(maxGamesPerSet, parsedGames));
 
     return {
-        numPlayers: state.numPlayers || players.length,
+        numPlayers,
+        numCourts,
         gamesPerSet,
         players,
         schedule: Array.isArray(state.schedule) ? state.schedule : [],

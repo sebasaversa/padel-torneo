@@ -1,4 +1,4 @@
-export function renderTournamentToolbar({ tournamentId, tournamentName, tournamentDate, formattedDate, numPlayers, gamesPerSet, scheduleLength, courts, rest, plannedRounds }) {
+export function renderTournamentToolbar({ tournamentId, tournamentName, tournamentDate, formattedDate, numPlayers, gamesPerSet, scheduleLength, courts, rest, plannedRounds, availableCourts }) {
     const title = document.getElementById('tournament-title');
     const date = document.getElementById('tournament-date');
     const createButton = document.getElementById('create-shared-button');
@@ -24,5 +24,11 @@ export function renderTournamentToolbar({ tournamentId, tournamentName, tourname
     document.getElementById('round-count-hint').textContent = scheduleLength > plannedRounds
         ? `${scheduleLength - plannedRounds} ronda${scheduleLength - plannedRounds === 1 ? '' : 's'} extra agregada${scheduleLength - plannedRounds === 1 ? '' : 's'}`
         : 'Cantidad de rondas independiente de los jugadores';
+    const courtCount = document.getElementById('court-count');
+    courtCount.value = courts;
+    courtCount.querySelector('option[value="2"]').disabled = availableCourts < 2;
+    document.getElementById('court-count-hint').textContent = availableCourts < 2
+        ? 'Con esta cantidad de jugadores se puede usar 1 cancha.'
+        : 'Elegí cuántas canchas se usan en simultáneo.';
     document.getElementById('matches-title').textContent = `3. Partidos (a ${gamesPerSet} games)`;
 }

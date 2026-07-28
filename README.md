@@ -6,7 +6,7 @@ La versión pública está disponible en [sebasaversa.github.io/padel-torneo](ht
 
 ## Funciones
 
-- De 4 a 16 jugadores y hasta 2 canchas.
+- De 4 a 16 jugadores y selección de 1 o 2 canchas simultáneas, según la cantidad disponible.
 - Rondas independientes de la cantidad de jugadores, con descansos rotativos.
 - Parejas y cruces generados automáticamente; cada jugador puede corregirse en una ronda o hacia el resto del fixture.
 - Games por set configurables y anotación manual o mediante botones táctiles.
@@ -17,7 +17,7 @@ La versión pública está disponible en [sebasaversa.github.io/padel-torneo](ht
 
 ## Uso del torneo
 
-1. Ajustá cantidad de jugadores, rondas y games por set.
+1. Ajustá cantidad de jugadores, canchas, rondas y games por set. Las rondas se pueden ingresar directamente o ajustar con los botones − y +.
 2. Editá los nombres si hace falta y revisá el fixture.
 3. Tocá **Crear torneo compartido**, elegí un nombre y compartí el link.
 4. Cada participante selecciona quién es; esa identidad se muestra en la app y en el historial.

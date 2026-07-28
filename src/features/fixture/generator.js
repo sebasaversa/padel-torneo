@@ -34,27 +34,27 @@ function pairEight(active) {
     ];
 }
 
-export function getCourts(numPlayers, maxCourts = 2) {
-    return Math.min(maxCourts, Math.floor(numPlayers / 4));
+export function getCourts(numPlayers, requestedCourts = 2) {
+    return Math.min(requestedCourts, Math.floor(numPlayers / 4));
 }
 
-export function getPlayingCount(numPlayers, maxCourts = 2) {
-    return getCourts(numPlayers, maxCourts) * 4;
+export function getPlayingCount(numPlayers, requestedCourts = 2) {
+    return getCourts(numPlayers, requestedCourts) * 4;
 }
 
-export function getRestCount(numPlayers, maxCourts = 2) {
-    return numPlayers - getPlayingCount(numPlayers, maxCourts);
+export function getRestCount(numPlayers, requestedCourts = 2) {
+    return numPlayers - getPlayingCount(numPlayers, requestedCourts);
 }
 
-export function getNumRounds(numPlayers, maxCourts = 2) {
-    const rest = getRestCount(numPlayers, maxCourts);
+export function getNumRounds(numPlayers, requestedCourts = 2) {
+    const rest = getRestCount(numPlayers, requestedCourts);
     if (rest > 0) return numPlayers;
     if (numPlayers === 4) return 3;
     return Math.max(numPlayers - 1, 3);
 }
 
-export function createAutomaticRound(numPlayers, roundIndex, maxCourts = 2) {
-    if (numPlayers === 9) {
+export function createAutomaticRound(numPlayers, roundIndex, requestedCourts = 2) {
+    if (numPlayers === 9 && getCourts(numPlayers, requestedCourts) === 2) {
         return {
             id: roundIndex,
             matches: [
@@ -74,7 +74,7 @@ export function createAutomaticRound(numPlayers, roundIndex, maxCourts = 2) {
         };
     }
 
-    const playingCount = getPlayingCount(numPlayers, maxCourts);
+    const playingCount = getPlayingCount(numPlayers, requestedCourts);
     const active = getActivePlayers(numPlayers, playingCount, roundIndex);
     const matches = playingCount >= 8
         ? pairEight(active)
@@ -84,12 +84,13 @@ export function createAutomaticRound(numPlayers, roundIndex, maxCourts = 2) {
     return { id: roundIndex, matches };
 }
 
-export function generateSchedule(numPlayers, roundCount = getNumRounds(numPlayers), {
+export function generateSchedule(numPlayers, roundCount, {
     minRounds = 1,
     maxRounds = 50,
     maxCourts = 2
 } = {}) {
-    const rounds = Math.max(minRounds, Math.min(maxRounds, roundCount));
+    const desiredRounds = roundCount ?? getNumRounds(numPlayers, maxCourts);
+    const rounds = Math.max(minRounds, Math.min(maxRounds, desiredRounds));
     return Array.from({ length: rounds }, (_, roundIndex) =>
         createAutomaticRound(numPlayers, roundIndex, maxCourts));
 }
