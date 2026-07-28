@@ -36,6 +36,7 @@ import { renderRoundCards } from './ui/components/round-card.js';
 import { renderTournamentToolbar } from './ui/components/toolbar.js';
 import { renderSummaryModal, setModalOpen } from './ui/components/modal.js';
 import { bindStaticUIEvents } from './ui/bind-events.js';
+import { createAppController } from './app/app-controller.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -962,7 +963,7 @@ import { bindStaticUIEvents } from './ui/bind-events.js';
         updateProgress();
     }
 
-    // Init
+    function initializeApplication() {
     tournamentState.value.players = defaultPlayers(tournamentState.value.numPlayers);
     generateSchedule();
     if (!loadFromHash()) {
@@ -971,8 +972,10 @@ import { bindStaticUIEvents } from './ui/bind-events.js';
         else renderAll();
     }
     if (tournamentId) connectToTournament(tournamentId);
+    }
 
-bindStaticUIEvents({
+    function bindApplicationEvents() {
+    bindStaticUIEvents({
     addRound, cancelPlayerChange, cancelTournamentName, changeGamesPerSet,
     changePlayerCount, changeRoundCount, closeActivityModal, closeSummaryModal,
     confirmIdentitySelection, confirmPlayerChange, confirmTournamentName,
@@ -980,6 +983,13 @@ bindStaticUIEvents({
     enterAsSpectator, exportJSON, importJSON, openActivityModal, openSummaryModal,
     resetAll, resetSchedule, setGamesPerSet, setPlayerCount, setRoundCount,
     shareState, shareTournamentSummary, showIdentityChoice, undoLastChange
-});
+    });
+    }
 
-window.addEventListener('hashchange', () => loadFromHash());
+    export function createTournamentApplication() {
+        return createAppController({
+            initialize: initializeApplication,
+            bindEvents: bindApplicationEvents,
+            onHashChange: () => loadFromHash()
+        });
+    }

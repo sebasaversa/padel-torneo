@@ -194,12 +194,12 @@ Progreso final: `toolbar.js`, `player-list.js`, `leaderboard.js`, `round-card.js
 
 ### 8. Componer la aplicación
 
-Estado: `[ ]` Pendiente.
+Estado: `[x]` Completa.
 
-- Crear `src/main.js` como punto de entrada.
-- Conectar store, dominio, servicios y UI mediante eventos explícitos.
-- Reducir o eliminar el uso de variables globales.
-- Mantener una sola dirección de actualización: acción → estado → renderizado → persistencia.
+- `[x]` Crear `src/main.js` como punto de entrada.
+- `[x]` Conectar store, dominio, servicios y UI mediante eventos explícitos.
+- `[x]` Eliminar el uso de funciones globales para los controles de la interfaz.
+- `[x]` Mantener una sola dirección de actualización: acción → estado → renderizado → persistencia.
 
 Estructura prevista:
 
@@ -209,6 +209,8 @@ src/app/app-controller.js
 ```
 
 Criterio de finalización: no quedan funciones de negocio grandes dentro de `index.html`.
+
+Progreso final: `src/main.js` inicia la aplicación; `src/app/app-controller.js` coordina su ciclo de vida. `index.html` queda como estructura declarativa, sin lógica de negocio ni handlers inline.
 
 ### 9. Tests y validación de regresión
 
