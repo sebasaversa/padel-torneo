@@ -238,12 +238,14 @@ Progreso final: GitHub Pages usa el workflow `.github/workflows/deploy-pages.yml
 
 ### 11. Limpieza y documentación
 
-Estado: `[ ]` Pendiente.
+Estado: `[x]` Completada.
 
-- Eliminar código duplicado y handlers antiguos.
-- Actualizar `README.md` con instalación, desarrollo, build y deploy.
-- Documentar las rutas de Firebase y las decisiones importantes.
-- Crear un tag de la primera versión modular estable.
+- `[x]` Eliminar código duplicado y handlers antiguos.
+- `[x]` Actualizar `README.md` con instalación, desarrollo, build y deploy.
+- `[x]` Documentar las rutas de Firebase y las decisiones importantes.
+- `[x]` Crear el tag `v5.0` de la primera versión modular estable.
+
+Progreso final: se confirmó que no quedan handlers inline ni código legacy activo. El README documenta el flujo de desarrollo con Node 22 y Vite, el deploy automático de GitHub Pages, los tipos de links compartidos y las rutas de Firebase. El tag estable `v5.0` queda asociado al cierre de la migración.
 
 ## Orden de commits recomendado
 
