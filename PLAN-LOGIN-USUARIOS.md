@@ -149,12 +149,12 @@ Commit: `Add tournament ownership metadata`.
 
 ### 3. Inicio de sesión y experiencia de sesión
 
-Estado: `[~]` En curso.
+Estado: `[x]` Completada.
 
 - `[x]` Crear pantalla/modal de sesión para Google, email/contraseña y cerrar sesión.
 - `[x]` Mantener entrada por link como espectador sin exigir una cuenta.
 - `[x]` Preparar una sesión que conserva cuentas existentes y usa identidad anónima sólo cuando corresponda.
-- `[~]` Mostrar nombre y estado de sesión en la interfaz; el rol se incorpora al bootstrap del super admin.
+- `[x]` Mostrar nombre y estado de sesión en la interfaz; el rol se incorpora al bootstrap del super admin.
 - `[x]` Manejar errores de credenciales sin revelar información sensible.
 - `[x]` Agregar flujo de recuperación de contraseña para admins.
 - `[x]` Validar accesibilidad y uso desde celular.
@@ -168,7 +168,7 @@ Commit: `Add Firebase sign-in experience`.
 Estado: `[~]` En curso.
 
 - `[x]` Implementar una Function de bootstrap protegida por el secreto `SUPER_ADMIN_EMAIL`.
-- `[ ]` Configurar el secreto, desplegar la Function y asignar la custom claim inicial del super admin.
+- `[x]` Configurar el secreto, desplegar la Function y asignar la custom claim inicial del super admin.
 - `[x]` Implementar Functions protegidas para crear, editar, desactivar, eliminar y listar usuarios.
 - `[ ]` Implementar Functions para restablecer contraseñas o generar un enlace seguro de recuperación.
 - `[ ]` Crear el panel “Usuarios” exclusivo del super admin.
