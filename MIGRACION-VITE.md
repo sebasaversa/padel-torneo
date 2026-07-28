@@ -171,12 +171,12 @@ Progreso final: Firebase, sincronización de estado, presencia, identidad, histo
 
 ### 7. Extraer la interfaz
 
-Estado: `[~]` En curso.
+Estado: `[x]` Completa.
 
-- `[~]` Crear renderizadores o componentes para toolbar, jugadores, tabla, rondas, partidos y scores.
-- Separar modales de nombre de torneo, identidad, actividad, resumen y reemplazo de jugadores.
-- Mantener los controles accesibles y cómodos en celular.
-- Eliminar handlers inline progresivamente.
+- `[x]` Crear renderizadores o componentes para toolbar, jugadores, tabla, rondas, partidos y scores.
+- `[x]` Separar la interacción de modales de nombre de torneo, identidad, actividad, resumen y reemplazo de jugadores.
+- `[x]` Mantener los controles accesibles y cómodos en celular.
+- `[x]` Eliminar handlers inline.
 
 Estructura prevista:
 
@@ -190,7 +190,7 @@ src/ui/components/score-control.js
 src/ui/components/modal.js
 ```
 
-Progreso actual: `toolbar.js`, `player-list.js`, `leaderboard.js`, `round-card.js` y `modal.js` ya separan las principales áreas visuales. Las rondas y los anotadores de puntos usan listeners explícitos; quedan los controles estáticos y algunos modales por migrar fuera de los handlers inline.
+Progreso final: `toolbar.js`, `player-list.js`, `leaderboard.js`, `round-card.js` y `modal.js` separan las principales áreas visuales. `bind-events.js` conecta todos los controles y modales mediante listeners explícitos, por lo que `index.html` ya no contiene handlers inline.
 
 ### 8. Componer la aplicación
 

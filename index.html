@@ -20,16 +20,16 @@
 
     <div class="card">
         <div class="toolbar">
-            <button class="btn btn-primary" id="create-shared-button" onclick="createSharedTournament()">☁️ Crear torneo compartido</button>
-            <button class="btn btn-primary" onclick="shareState()">🔗 Compartir link</button>
-            <button class="btn btn-secondary" id="undo-button" onclick="undoLastChange()" disabled>↩ Deshacer</button>
-            <button class="btn btn-secondary" onclick="openSummaryModal()">🏁 Resumen</button>
-            <button class="btn btn-secondary" onclick="openActivityModal()">🕘 Actividad</button>
-            <button class="btn btn-secondary" onclick="exportJSON()">📥 Exportar</button>
-            <button class="btn btn-secondary" onclick="importJSON()">📤 Importar</button>
-            <button class="btn btn-secondary btn-sm" onclick="addRound()">➕ Agregar ronda</button>
-            <button class="btn btn-secondary btn-sm" onclick="resetSchedule()">🔄 Regenerar fixture</button>
-            <button class="btn btn-danger btn-sm" onclick="resetAll()">🗑️ Borrar todo</button>
+            <button class="btn btn-primary" id="create-shared-button">☁️ Crear torneo compartido</button>
+            <button class="btn btn-primary" id="share-button">🔗 Compartir link</button>
+            <button class="btn btn-secondary" id="undo-button" disabled>↩ Deshacer</button>
+            <button class="btn btn-secondary" id="summary-button">🏁 Resumen</button>
+            <button class="btn btn-secondary" id="activity-button">🕘 Actividad</button>
+            <button class="btn btn-secondary" id="export-button">📥 Exportar</button>
+            <button class="btn btn-secondary" id="import-button">📤 Importar</button>
+            <button class="btn btn-secondary btn-sm" id="add-round-button">➕ Agregar ronda</button>
+            <button class="btn btn-secondary btn-sm" id="reset-schedule-button">🔄 Regenerar fixture</button>
+            <button class="btn btn-danger btn-sm" id="reset-all-button">🗑️ Borrar todo</button>
         </div>
         <div id="sync-status" style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;" aria-live="polite">Guardado en este dispositivo</div>
         <div id="presence-status" style="font-size:0.82rem;color:var(--muted);margin-bottom:8px;" aria-live="polite" hidden></div>
@@ -43,30 +43,30 @@
         <div class="player-count-row">
             <label for="player-count">Cantidad:</label>
             <div class="count-controls">
-                <button class="btn btn-secondary btn-sm" onclick="changePlayerCount(-1)" aria-label="Quitar jugador">−</button>
+                <button class="btn btn-secondary btn-sm" id="player-count-decrease" aria-label="Quitar jugador">−</button>
                 <input type="number" id="player-count" min="4" max="16" value="9"
-                       onchange="setPlayerCount(parseInt(this.value, 10))">
-                <button class="btn btn-secondary btn-sm" onclick="changePlayerCount(1)" aria-label="Agregar jugador">+</button>
+                       >
+                <button class="btn btn-secondary btn-sm" id="player-count-increase" aria-label="Agregar jugador">+</button>
             </div>
             <span class="count-hint" id="count-hint"></span>
         </div>
         <div class="player-count-row">
             <label for="round-count">Rondas:</label>
             <div class="count-controls">
-                <button class="btn btn-secondary btn-sm" onclick="changeRoundCount(-1)" aria-label="Quitar una ronda">−</button>
+                <button class="btn btn-secondary btn-sm" id="round-count-decrease" aria-label="Quitar una ronda">−</button>
                 <input type="number" id="round-count" min="1" max="50" value="9"
-                       onchange="setRoundCount(parseInt(this.value, 10))">
-                <button class="btn btn-secondary btn-sm" onclick="changeRoundCount(1)" aria-label="Agregar una ronda">+</button>
+                       >
+                <button class="btn btn-secondary btn-sm" id="round-count-increase" aria-label="Agregar una ronda">+</button>
             </div>
             <span class="count-hint" id="round-count-hint"></span>
         </div>
         <div class="player-count-row">
             <label for="games-per-set">Games por set:</label>
             <div class="count-controls">
-                <button class="btn btn-secondary btn-sm" onclick="changeGamesPerSet(-1)" aria-label="Reducir games por set">−</button>
+                <button class="btn btn-secondary btn-sm" id="games-decrease" aria-label="Reducir games por set">−</button>
                 <input type="number" id="games-per-set" min="1" max="20" value="4"
-                       oninput="setGamesPerSet(parseInt(this.value, 10))">
-                <button class="btn btn-secondary btn-sm" onclick="changeGamesPerSet(1)" aria-label="Aumentar games por set">+</button>
+                       >
+                <button class="btn btn-secondary btn-sm" id="games-increase" aria-label="Aumentar games por set">+</button>
             </div>
             <span class="count-hint">Puntaje objetivo de cada partido</span>
         </div>
@@ -106,11 +106,10 @@
         <h2 id="tournament-name-modal-title">Crear torneo compartido</h2>
         <p>Elegí un nombre para identificarlo en el grupo.</p>
         <label for="tournament-name-input">Nombre del torneo</label>
-        <input type="text" id="tournament-name-input" maxlength="60" placeholder="Ej.: Pádel del viernes"
-               onkeydown="if (event.key === 'Enter') confirmTournamentName(); if (event.key === 'Escape') cancelTournamentName()">
+        <input type="text" id="tournament-name-input" maxlength="60" placeholder="Ej.: Pádel del viernes">
         <div class="modal-actions">
-            <button class="btn btn-secondary" type="button" onclick="cancelTournamentName()">Cancelar</button>
-            <button class="btn btn-primary" type="button" onclick="confirmTournamentName()">Continuar</button>
+            <button class="btn btn-secondary" type="button" id="cancel-tournament-name">Cancelar</button>
+            <button class="btn btn-primary" type="button" id="confirm-tournament-name">Continuar</button>
         </div>
     </div>
 </div>
@@ -119,15 +118,15 @@
         <h2 id="player-change-modal-title">Actualizar fixture</h2>
         <p id="player-change-description"></p>
         <div class="choice-actions">
-            <button class="btn btn-primary" type="button" onclick="confirmPlayerChange('future')">
+            <button class="btn btn-primary" type="button" id="confirm-player-change-future">
                 Desde esta ronda en adelante
                 <span>Intercambia jugadores y descansos en las rondas futuras.</span>
             </button>
-            <button class="btn btn-secondary" type="button" onclick="confirmPlayerChange('single')">
+            <button class="btn btn-secondary" type="button" id="confirm-player-change-single">
                 Solo esta ronda
                 <span>Modifica únicamente los partidos de esta ronda.</span>
             </button>
-            <button class="btn btn-secondary" type="button" onclick="cancelPlayerChange()">Cancelar</button>
+            <button class="btn btn-secondary" type="button" id="cancel-player-change">Cancelar</button>
         </div>
     </div>
 </div>
@@ -136,9 +135,9 @@
         <h2 id="summary-modal-title">Resumen del torneo</h2>
         <div class="summary-content" id="summary-content"></div>
         <div class="modal-actions">
-            <button class="btn btn-secondary" type="button" onclick="closeSummaryModal()">Cerrar</button>
-            <button class="btn btn-secondary" type="button" onclick="copyTournamentSummary()">Copiar</button>
-            <button class="btn btn-primary" type="button" onclick="shareTournamentSummary()">Compartir</button>
+            <button class="btn btn-secondary" type="button" id="close-summary">Cerrar</button>
+            <button class="btn btn-secondary" type="button" id="copy-summary">Copiar</button>
+            <button class="btn btn-primary" type="button" id="share-summary">Compartir</button>
         </div>
     </div>
 </div>
@@ -150,16 +149,16 @@
             <label for="identity-player-select">Jugadores disponibles</label>
             <select id="identity-player-select"></select>
             <div class="modal-actions">
-                <button class="btn btn-primary" id="identity-continue-button" type="button" onclick="continueIdentitySelection()">Continuar</button>
+                <button class="btn btn-primary" id="identity-continue-button" type="button">Continuar</button>
             </div>
-            <button class="btn btn-secondary" id="spectator-button" type="button" onclick="enterAsSpectator()" hidden>Entrar como espectador</button>
+            <button class="btn btn-secondary" id="spectator-button" type="button" hidden>Entrar como espectador</button>
         </div>
         <div id="identity-confirm-step" hidden>
             <h2>Confirmar identidad</h2>
             <p id="identity-confirm-description"></p>
             <div class="modal-actions">
-                <button class="btn btn-secondary" type="button" onclick="showIdentityChoice()">Elegir otro</button>
-                <button class="btn btn-primary" id="identity-confirm-button" type="button" onclick="confirmIdentitySelection()">Sí, soy yo</button>
+                <button class="btn btn-secondary" type="button" id="identity-choose-other">Elegir otro</button>
+                <button class="btn btn-primary" id="identity-confirm-button" type="button">Sí, soy yo</button>
             </div>
         </div>
     </div>
@@ -169,7 +168,7 @@
         <h2 id="activity-modal-title">Actividad del torneo</h2>
         <div class="activity-list" id="activity-list"></div>
         <div class="modal-actions">
-            <button class="btn btn-secondary" type="button" onclick="closeActivityModal()">Cerrar</button>
+            <button class="btn btn-secondary" type="button" id="close-activity">Cerrar</button>
         </div>
     </div>
 </div>

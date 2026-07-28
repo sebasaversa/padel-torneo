@@ -35,6 +35,7 @@ import { renderLeaderboard } from './ui/components/leaderboard.js';
 import { renderRoundCards } from './ui/components/round-card.js';
 import { renderTournamentToolbar } from './ui/components/toolbar.js';
 import { renderSummaryModal, setModalOpen } from './ui/components/modal.js';
+import { bindStaticUIEvents } from './ui/bind-events.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -971,18 +972,14 @@ import { renderSummaryModal, setModalOpen } from './ui/components/modal.js';
     }
     if (tournamentId) connectToTournament(tournamentId);
 
-window.addEventListener('hashchange', () => loadFromHash());
-
-// Compatibilidad temporal con los handlers inline del HTML. Se eliminarán al
-// extraer los componentes de UI y reemplazarlos por listeners explícitos.
-Object.assign(window, {
-    addRound, adjustScore, cancelPlayerChange, cancelTournamentName,
-    changeGamesPerSet, changePlayerCount, changeRoundCount,
-    closeActivityModal, closeSummaryModal, confirmIdentitySelection,
-    confirmPlayerChange, confirmTournamentName, continueIdentitySelection,
-    copyTournamentSummary, createSharedTournament, enterAsSpectator,
-    exportJSON, importJSON, openActivityModal, openSummaryModal,
+bindStaticUIEvents({
+    addRound, cancelPlayerChange, cancelTournamentName, changeGamesPerSet,
+    changePlayerCount, changeRoundCount, closeActivityModal, closeSummaryModal,
+    confirmIdentitySelection, confirmPlayerChange, confirmTournamentName,
+    continueIdentitySelection, copyTournamentSummary, createSharedTournament,
+    enterAsSpectator, exportJSON, importJSON, openActivityModal, openSummaryModal,
     resetAll, resetSchedule, setGamesPerSet, setPlayerCount, setRoundCount,
-    shareState, shareTournamentSummary, showIdentityChoice, toggleRound,
-    undoLastChange, updateMatchPlayer, updateScore
+    shareState, shareTournamentSummary, showIdentityChoice, undoLastChange
 });
+
+window.addEventListener('hashchange', () => loadFromHash());
