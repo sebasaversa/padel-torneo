@@ -83,6 +83,7 @@ import { createAppController } from './app/app-controller.js';
     let historyRecordedForTournament = false;
     let sharedTournamentCatalog = [];
     let sessionUser = authSession.currentUser();
+    let sessionRole = null;
     const presenceId = (() => {
         const key = 'padel-torneo-device-id';
         const generatedId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
@@ -140,9 +141,32 @@ import { createAppController } from './app/app-controller.js';
         const isRegisteredUser = sessionUser && !sessionUser.isAnonymous;
         signInButton.hidden = Boolean(isRegisteredUser);
         signOutButton.hidden = !isRegisteredUser;
+        const roleLabel = sessionRole === 'superAdmin' ? ' · Super admin' : sessionRole === 'admin' ? ' · Admin' : '';
         status.textContent = isRegisteredUser
-            ? `Sesión iniciada: ${sessionUser.displayName}`
+            ? `Sesión iniciada: ${sessionUser.displayName}${roleLabel}`
             : 'Modo invitado: podés entrar a un torneo compartido desde su link.';
+    }
+
+    async function refreshSessionRole(forceRefresh = false) {
+        try {
+            const claims = await authSession.getClaims(forceRefresh);
+            sessionRole = claims.platformRole || null;
+        } catch (error) {
+            sessionRole = null;
+        }
+        renderAuthStatus();
+    }
+
+    async function bootstrapSuperAdmin() {
+        const callable = firebaseClient.getFunctions().httpsCallable('bootstrapSuperAdmin');
+        try {
+            await callable();
+            await refreshSessionRole(true);
+            return sessionRole === 'superAdmin';
+        } catch (error) {
+            await refreshSessionRole();
+            return false;
+        }
     }
 
     function openAuthModal() {
@@ -166,8 +190,9 @@ import { createAppController } from './app/app-controller.js';
     async function signInWithGoogle() {
         try {
             const user = await authSession.signInWithGoogle();
+            const isSuperAdmin = await bootstrapSuperAdmin();
             closeAuthModal();
-            showToast(`Sesión iniciada como ${user.displayName}`);
+            showToast(isSuperAdmin ? `Sesión iniciada como super admin: ${user.displayName}` : `Sesión iniciada como ${user.displayName}`);
         } catch (error) {
             if (error?.code !== 'auth/popup-closed-by-user') showToast(getAuthErrorMessage(error));
         }
@@ -182,6 +207,7 @@ import { createAppController } from './app/app-controller.js';
         }
         try {
             const user = await authSession.signInWithEmailAndPassword(email, password);
+            await refreshSessionRole();
             closeAuthModal();
             showToast(`Sesión iniciada como ${user.displayName}`);
         } catch (error) {
@@ -206,6 +232,7 @@ import { createAppController } from './app/app-controller.js';
     async function signOut() {
         try {
             await authSession.signOut();
+            sessionRole = null;
             await firebaseClient.getDatabase();
             showToast('Sesión cerrada. Seguís como invitado.');
         } catch (error) {
@@ -1154,7 +1181,7 @@ import { createAppController } from './app/app-controller.js';
     function initializeApplication() {
     authSession.subscribe(user => {
         sessionUser = user;
-        renderAuthStatus();
+        refreshSessionRole();
     });
     tournamentState.value.players = defaultPlayers(tournamentState.value.numPlayers);
     generateSchedule();

@@ -28,6 +28,11 @@ export function createAuthSession({ firebase, auth }) {
         sendPasswordReset(email) {
             return auth.sendPasswordResetEmail(email.trim());
         },
+        async getClaims(forceRefresh = false) {
+            if (!auth.currentUser || auth.currentUser.isAnonymous) return {};
+            const token = await auth.currentUser.getIdTokenResult(forceRefresh);
+            return token.claims || {};
+        },
         signOut() {
             return auth.signOut();
         }

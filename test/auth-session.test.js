@@ -4,7 +4,7 @@ import test from 'node:test';
 import { createAuthSession } from '../src/services/auth-session.js';
 
 test('normaliza la sesión y usa Google para iniciar sesión', async () => {
-    const user = { uid: 'admin-1', email: 'ana@ejemplo.com', displayName: 'Ana', isAnonymous: false };
+    const user = { uid: 'admin-1', email: 'ana@ejemplo.com', displayName: 'Ana', isAnonymous: false, getIdTokenResult: async force => ({ claims: { platformRole: force ? 'superAdmin' : 'admin' } }) };
     let receivedProvider;
     class GoogleAuthProvider {}
     const session = createAuthSession({
@@ -22,11 +22,12 @@ test('normaliza la sesión y usa Google para iniciar sesión', async () => {
     assert.deepEqual(session.currentUser(), { uid: 'admin-1', email: 'ana@ejemplo.com', displayName: 'Ana', isAnonymous: false });
     assert.equal((await session.signInWithGoogle()).uid, 'admin-1');
     assert.ok(receivedProvider instanceof GoogleAuthProvider);
+    assert.deepEqual(await session.getClaims(true), { platformRole: 'superAdmin' });
 });
 
 test('permite escuchar, iniciar con contraseña y recuperar acceso', async () => {
     const calls = [];
-    const user = { uid: 'admin-2', email: 'admin@ejemplo.com', isAnonymous: false };
+    const user = { uid: 'admin-2', email: 'admin@ejemplo.com', isAnonymous: false, getIdTokenResult: async () => ({ claims: { platformRole: 'admin' } }) };
     const session = createAuthSession({
         firebase: { auth: { GoogleAuthProvider: class {} } },
         auth: {
@@ -50,4 +51,5 @@ test('permite escuchar, iniciar con contraseña y recuperar acceso', async () =>
         ['reset', 'admin@ejemplo.com'],
         ['signOut']
     ]);
+    assert.deepEqual(await session.getClaims(), {});
 });

@@ -20,7 +20,8 @@ test('inicializa Firebase una sola vez y reutiliza la base', async () => {
         apps: [],
         initializeApp: () => { initialized += 1; firebase.apps.push({}); },
         auth: () => auth,
-        database: () => database
+        database: () => database,
+        functions: region => ({ region })
     };
     firebase.database.ServerValue = { TIMESTAMP: 'timestamp' };
 
@@ -30,6 +31,7 @@ test('inicializa Firebase una sola vez y reutiliza la base', async () => {
     assert.equal(initialized, 1);
     assert.equal(signedIn, 1);
     assert.equal(client.serverTimestamp(), 'timestamp');
+    assert.deepEqual(client.getFunctions(), { region: 'us-central1' });
 });
 
 test('mantiene una sesión existente en lugar de reemplazarla por una anónima', async () => {

@@ -1,6 +1,7 @@
 export function createFirebaseClient({ firebase, config }) {
     let database = null;
     let authInstance = null;
+    let functionsInstance = null;
 
     function initialize() {
         if (!firebase.apps.length) firebase.initializeApp(config);
@@ -20,6 +21,11 @@ export function createFirebaseClient({ firebase, config }) {
             return database;
         },
         getAuth,
+        getFunctions() {
+            initialize();
+            if (!functionsInstance) functionsInstance = firebase.functions('us-central1');
+            return functionsInstance;
+        },
         serverTimestamp() {
             return firebase.database.ServerValue.TIMESTAMP;
         }
