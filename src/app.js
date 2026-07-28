@@ -15,6 +15,8 @@ import {
     hasRecordedScoresFromRound,
     swapPlayersInRound
 } from './features/fixture/player-swaps.js';
+import { adjustScore as getAdjustedScore, normalizeScore } from './features/scoring/scores.js';
+import { getScoreWarning, isMatchDone, isRoundDone } from './features/scoring/validation.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -916,10 +918,7 @@ import {
     }
 
     function updateScore(roundIdx, matchIdx, team, value) {
-        const parsed = parseInt(value, 10);
-        const nextScore = value === '' || Number.isNaN(parsed)
-            ? ''
-            : Math.max(0, Math.min(tournamentState.value.gamesPerSet, parsed));
+        const nextScore = normalizeScore(value, tournamentState.value.gamesPerSet);
         if (tournamentState.value.schedule[roundIdx].matches[matchIdx][team] === nextScore) return;
         rememberStateForUndo();
         tournamentState.value.schedule[roundIdx].matches[matchIdx][team] = nextScore;
@@ -934,8 +933,8 @@ import {
     }
 
     function adjustScore(roundIdx, matchIdx, team, amount) {
-        const current = parseInt(tournamentState.value.schedule[roundIdx].matches[matchIdx][team], 10);
-        const next = Math.max(0, Math.min(tournamentState.value.gamesPerSet, (Number.isNaN(current) ? 0 : current) + amount));
+        const current = tournamentState.value.schedule[roundIdx].matches[matchIdx][team];
+        const next = getAdjustedScore(current, amount, tournamentState.value.gamesPerSet);
         updateScore(roundIdx, matchIdx, team, next);
     }
 
@@ -950,28 +949,6 @@ import {
             if (!playing.has(i)) resting.push(tournamentState.value.players[i]);
         }
         return resting;
-    }
-
-    function isMatchDone(m) {
-        return m.score1 !== '' && m.score2 !== '';
-    }
-
-    function getScoreWarning(m) {
-        if (!isMatchDone(m)) return '';
-        const score1 = parseInt(m.score1, 10);
-        const score2 = parseInt(m.score2, 10);
-        if (score1 === score2) return 'Empate: revisá el resultado antes de cerrar la ronda.';
-        if (score1 < tournamentState.value.gamesPerSet && score2 < tournamentState.value.gamesPerSet) {
-            return `Ningún equipo llegó a ${tournamentState.value.gamesPerSet} games.`;
-        }
-        if (score1 === tournamentState.value.gamesPerSet && score2 === tournamentState.value.gamesPerSet) {
-            return 'Ambos equipos llegaron al objetivo de games.';
-        }
-        return '';
-    }
-
-    function isRoundDone(round) {
-        return round.matches.every(isMatchDone);
     }
 
     function toggleRound(rIdx) {
@@ -1004,7 +981,7 @@ import {
 
             round.matches.forEach((m, mIdx) => {
                 const mDone = isMatchDone(m);
-                const scoreWarning = getScoreWarning(m);
+                const scoreWarning = getScoreWarning(m, tournamentState.value.gamesPerSet);
                 html += `
                 <div class="match ${mDone ? 'match-done' : ''}">
                     <div class="court-title">📍 Cancha ${m.court}</div>

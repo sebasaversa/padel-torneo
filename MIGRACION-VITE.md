@@ -123,13 +123,13 @@ Progreso final: `src/features/fixture/generator.js` contiene la generación de r
 
 ### 5. Extraer resultados y estadísticas
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso.
 
-- Separar actualización de scores y límites de games.
-- Separar detección de partidos y rondas completas.
-- Separar advertencias de resultados.
+- `[x]` Separar actualización de scores y límites de games.
+- `[x]` Separar detección de partidos y rondas completas.
+- `[x]` Separar advertencias de resultados.
 - Separar tabla general, diferencias, resumen y rachas.
-- Agregar tests unitarios para resultados válidos, empates y partidos incompletos.
+- `[x]` Agregar tests unitarios para resultados válidos, empates y partidos incompletos.
 
 Estructura prevista:
 
