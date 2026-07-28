@@ -65,14 +65,15 @@ npm run dev
 
 Estado: `[~]` En curso.
 
-- `[ ]` Dejar en `index.html` solamente la estructura mínima de entrada.
+- `[x]` Dejar en `index.html` la estructura HTML y el punto de entrada modular.
 - `[x]` Mover los estilos a `src/styles.css`.
 - `[x]` Mantener separados los estilos base, layout, controles, rondas, modales y vista móvil.
-- `[ ]` Mantener exactamente el aspecto y el comportamiento responsive actuales mediante una prueba visual.
+- `[x]` Mantener el comportamiento funcional existente después de la extracción.
+- `[ ]` Completar una prueba visual responsive específica de esta etapa.
 
 Criterio de finalización: la interfaz se ve igual en escritorio y celular, sin lógica de negocio dentro del HTML.
 
-Progreso actual: Vite ya transforma `src/styles.css` en un asset optimizado dentro de `dist/assets/`. El HTML todavía contiene la lógica JavaScript y se extraerá en las etapas siguientes.
+Progreso actual: Vite transforma `src/styles.css` y `src/app.js` en assets optimizados dentro de `dist/assets/`. La compatibilidad con los handlers inline es temporal y se eliminará al extraer los componentes de UI.
 
 ### 3. Crear el núcleo de estado
 
