@@ -226,13 +226,15 @@ Estado: `[x]` Completada.
 
 ### 10. Deploy con GitHub Pages
 
-Estado: `[~]` En curso.
+Estado: `[x]` Completada.
 
 - `[x]` Crear workflow de GitHub Actions para instalar dependencias y ejecutar `npm run build`.
-- `[ ]` Publicar `dist/` en GitHub Pages.
-- Mantener la URL pública actual.
-- Verificar que las rutas de Firebase, assets y módulos funcionen en producción.
-- No publicar una etapa incompleta.
+- `[x]` Publicar `dist/` en GitHub Pages.
+- `[x]` Mantener la URL pública actual.
+- `[x]` Verificar que las rutas de Firebase, assets y módulos funcionen en producción.
+- `[x]` No publicar una etapa incompleta.
+
+Progreso final: GitHub Pages usa el workflow `.github/workflows/deploy-pages.yml`, que instala dependencias con Node 22, ejecuta `npm run build` y publica el artefacto `dist/`. La URL se mantiene en `https://sebasaversa.github.io/padel-torneo/`; los assets generados, los módulos y un torneo compartido de Firebase fueron verificados desde producción.
 
 ### 11. Limpieza y documentación
 
