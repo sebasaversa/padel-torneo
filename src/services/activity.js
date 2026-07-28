@@ -1,4 +1,4 @@
-export function createActivityLog({ tournamentRef, serverTimestamp, getActorName, getDeviceLabel, onEntries }) {
+export function createActivityLog({ tournamentRef, serverTimestamp, getActorName, getActorIdentity = () => ({}), getDeviceLabel, onEntries }) {
     let unsubscribe = null;
     let entries = [];
 
@@ -16,6 +16,7 @@ export function createActivityLog({ tournamentRef, serverTimestamp, getActorName
         return tournamentRef.child('history').push({
             message,
             actor: getActorName(),
+            ...getActorIdentity(),
             device: getDeviceLabel(),
             createdAt: serverTimestamp()
         });

@@ -760,6 +760,13 @@ import { createAppController } from './app/app-controller.js';
         return `${getActorName()} · ${getDeviceLabel()}`;
     }
 
+    function getActorIdentity() {
+        return {
+            actorUid: sessionUser?.uid || null,
+            actorRole: sessionRole || (Number.isInteger(actorPlayerId) ? 'participant' : 'spectator')
+        };
+    }
+
     function updateIdentityStatus() {
         const status = document.getElementById('identity-status');
         if (!status) return;
@@ -933,7 +940,7 @@ import { createAppController } from './app/app-controller.js';
             return;
         }
         list.innerHTML = historyEntries.slice().reverse().map(entry => `
-            <div class="activity-entry"><strong>${escapeHTML(entry.actor || 'Dispositivo')}</strong> · ${escapeHTML(entry.device || 'Navegador web')}<br>${escapeHTML(entry.message || 'Actualizó el torneo')}<time>${formatActivityTime(entry.createdAt)}</time></div>
+            <div class="activity-entry"><strong>${escapeHTML(entry.actor || 'Dispositivo')}</strong> · ${escapeHTML(entry.actorRole || 'espectador')} · ${escapeHTML(entry.device || 'Navegador web')}<br>${escapeHTML(entry.message || 'Actualizó el torneo')}<time>${formatActivityTime(entry.createdAt)}</time></div>
         `).join('');
     }
 
@@ -1020,6 +1027,7 @@ import { createAppController } from './app/app-controller.js';
                 tournamentRef,
                 serverTimestamp: () => firebaseClient.serverTimestamp(),
                 getActorName,
+                getActorIdentity,
                 getDeviceLabel,
                 onEntries: () => {
                 if (!document.getElementById('activity-modal').hidden) renderActivity();
