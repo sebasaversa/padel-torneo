@@ -133,9 +133,10 @@ Commit: `Prepare Firebase authentication and functions`.
 
 ### 2. Base de perfiles, metadata de torneos y migración compatible
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso.
 
 - `[ ]` Crear servicios para perfiles de usuario y metadata de torneo.
+- `[x]` Crear y probar el modelo compatible de metadata de propietarios y admins por torneo.
 - `[ ]` Al crear un torneo, registrar `ownerUid`, `admins` y timestamps.
 - `[ ]` Crear una migración perezosa: un torneo anterior recibe metadata mínima al ser abierto por un super admin.
 - `[ ]` Definir qué ocurre con torneos existentes que no tienen propietario (Decidido: super admin como administrador).
