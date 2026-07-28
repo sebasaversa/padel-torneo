@@ -22,6 +22,7 @@ import { getScoreWarning, isMatchDone, isRoundDone } from './features/scoring/va
 import { getBestStreak, getLeaderboardStats, getProgress } from './features/scoring/statistics.js';
 import { buildTournamentSummaryText } from './features/scoring/summary.js';
 import { createFirebaseClient } from './services/firebase.js';
+import { createAuthSession } from './services/auth-session.js';
 import { createTournamentSync } from './services/tournament-sync.js';
 import { createTournamentIdentity } from './services/identity.js';
 import { createActivityLog } from './services/activity.js';
@@ -66,6 +67,7 @@ import { createAppController } from './app/app-controller.js';
         appId: '1:721713590787:web:3df62ebcfc8841e41c5436'
     };
     const firebaseClient = createFirebaseClient({ firebase, config: firebaseConfig });
+    const authSession = createAuthSession({ firebase, auth: firebaseClient.getAuth() });
     let tournamentId = new URLSearchParams(location.search).get('torneo');
     let realtimeDb = null;
     let tournamentRef = null;
@@ -80,6 +82,7 @@ import { createAppController } from './app/app-controller.js';
     let sharedStateLoaded = false;
     let historyRecordedForTournament = false;
     let sharedTournamentCatalog = [];
+    let sessionUser = authSession.currentUser();
     const presenceId = (() => {
         const key = 'padel-torneo-device-id';
         const generatedId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
@@ -128,6 +131,86 @@ import { createAppController } from './app/app-controller.js';
 
     function updateTournamentHeader() {
         if (!tournamentId) setPresenceStatus(0);
+    }
+
+    function renderAuthStatus() {
+        const signInButton = document.getElementById('auth-button');
+        const signOutButton = document.getElementById('sign-out-button');
+        const status = document.getElementById('auth-status');
+        const isRegisteredUser = sessionUser && !sessionUser.isAnonymous;
+        signInButton.hidden = Boolean(isRegisteredUser);
+        signOutButton.hidden = !isRegisteredUser;
+        status.textContent = isRegisteredUser
+            ? `Sesión iniciada: ${sessionUser.displayName}`
+            : 'Modo invitado: podés entrar a un torneo compartido desde su link.';
+    }
+
+    function openAuthModal() {
+        document.getElementById('auth-email-input').value = '';
+        document.getElementById('auth-password-input').value = '';
+        setModalOpen('auth-modal', true);
+        setTimeout(() => document.getElementById('auth-email-input').focus(), 0);
+    }
+
+    function closeAuthModal() {
+        setModalOpen('auth-modal', false);
+    }
+
+    function getAuthErrorMessage(error) {
+        if (error?.code === 'auth/popup-closed-by-user') return 'Se canceló el inicio de sesión.';
+        if (error?.code === 'auth/invalid-credential' || error?.code === 'auth/wrong-password') return 'El email o la contraseña no son correctos.';
+        if (error?.code === 'auth/too-many-requests') return 'Demasiados intentos. Probá de nuevo más tarde.';
+        return 'No se pudo iniciar sesión. Revisá tus datos e intentá nuevamente.';
+    }
+
+    async function signInWithGoogle() {
+        try {
+            const user = await authSession.signInWithGoogle();
+            closeAuthModal();
+            showToast(`Sesión iniciada como ${user.displayName}`);
+        } catch (error) {
+            if (error?.code !== 'auth/popup-closed-by-user') showToast(getAuthErrorMessage(error));
+        }
+    }
+
+    async function signInWithEmailAndPassword() {
+        const email = document.getElementById('auth-email-input').value;
+        const password = document.getElementById('auth-password-input').value;
+        if (!email || !password) {
+            showToast('Ingresá email y contraseña.');
+            return;
+        }
+        try {
+            const user = await authSession.signInWithEmailAndPassword(email, password);
+            closeAuthModal();
+            showToast(`Sesión iniciada como ${user.displayName}`);
+        } catch (error) {
+            showToast(getAuthErrorMessage(error));
+        }
+    }
+
+    async function sendPasswordReset() {
+        const email = document.getElementById('auth-email-input').value;
+        if (!email) {
+            showToast('Ingresá tu email para recuperar el acceso.');
+            return;
+        }
+        try {
+            await authSession.sendPasswordReset(email);
+            showToast('Te enviamos un email para restablecer la contraseña.');
+        } catch (error) {
+            showToast(getAuthErrorMessage(error));
+        }
+    }
+
+    async function signOut() {
+        try {
+            await authSession.signOut();
+            await firebaseClient.getDatabase();
+            showToast('Sesión cerrada. Seguís como invitado.');
+        } catch (error) {
+            showToast('No se pudo cerrar la sesión. Intentá de nuevo.');
+        }
     }
 
     function formatTournamentUpdatedAt(timestamp) {
@@ -1056,6 +1139,7 @@ import { createAppController } from './app/app-controller.js';
 
     function renderAll() {
         updateTournamentHeader();
+        renderAuthStatus();
         updateIdentityStatus();
         updateUndoButton();
         updateSubtitle();
@@ -1068,6 +1152,10 @@ import { createAppController } from './app/app-controller.js';
     }
 
     function initializeApplication() {
+    authSession.subscribe(user => {
+        sessionUser = user;
+        renderAuthStatus();
+    });
     tournamentState.value.players = defaultPlayers(tournamentState.value.numPlayers);
     generateSchedule();
     if (!loadFromHash()) {
@@ -1086,9 +1174,10 @@ import { createAppController } from './app/app-controller.js';
     changeRoundCount, closeActivityModal, closeSummaryModal,
     confirmIdentitySelection, confirmPlayerChange, confirmTournamentName,
     continueIdentitySelection, copyTournamentSummary, createSharedTournament,
-    enterAsSpectator, exportJSON, goHome, importJSON, openActivityModal, openPreviousTournament, openSummaryModal,
-    resetAll, resetSchedule, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
-    shareState, shareTournamentSummary, showIdentityChoice, showMainPage, showTournamentHistory, undoLastChange
+    enterAsSpectator, exportJSON, goHome, importJSON, openActivityModal, openAuthModal, openPreviousTournament, openSummaryModal,
+    resetAll, resetSchedule, sendPasswordReset, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
+    shareState, shareTournamentSummary, showIdentityChoice, showMainPage, showTournamentHistory, signInWithEmailAndPassword,
+    signInWithGoogle, signOut, closeAuthModal, undoLastChange
     });
     }
 

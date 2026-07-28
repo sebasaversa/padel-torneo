@@ -197,6 +197,34 @@
             font-size: 0.85rem;
             font-weight: 700;
         }
+        .auth-status {
+            margin: 0 0 8px;
+            color: var(--muted);
+            font-size: 0.82rem;
+        }
+        .auth-google-button,
+        .auth-email-button,
+        .auth-reset-button {
+            width: 100%;
+            margin-top: 10px;
+            min-height: 44px;
+        }
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 16px 0;
+            color: var(--muted);
+            font-size: 0.78rem;
+            text-align: center;
+        }
+        .auth-divider::before,
+        .auth-divider::after {
+            content: '';
+            height: 1px;
+            background: var(--border);
+            flex: 1;
+        }
         .tournament-history-description {
             margin: -4px 0 12px;
             color: var(--muted);

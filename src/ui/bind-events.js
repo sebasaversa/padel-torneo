@@ -3,6 +3,12 @@ export function bindStaticUIEvents(actions) {
     click('create-shared-button', () => actions.createSharedTournament());
     click('history-button', actions.showTournamentHistory);
     click('back-to-main-button', actions.showMainPage);
+    click('auth-button', actions.openAuthModal);
+    click('sign-out-button', actions.signOut);
+    click('sign-in-google-button', actions.signInWithGoogle);
+    click('sign-in-email-button', actions.signInWithEmailAndPassword);
+    click('reset-password-button', actions.sendPasswordReset);
+    click('close-auth-modal', actions.closeAuthModal);
     click('home-button', actions.goHome);
     click('share-button', actions.shareState);
     click('undo-button', actions.undoLastChange);
@@ -48,5 +54,8 @@ export function bindStaticUIEvents(actions) {
     document.getElementById('tournament-name-input')?.addEventListener('keydown', event => {
         if (event.key === 'Enter') actions.confirmTournamentName();
         if (event.key === 'Escape') actions.cancelTournamentName();
+    });
+    document.getElementById('auth-password-input')?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') actions.signInWithEmailAndPassword();
     });
 }

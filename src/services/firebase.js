@@ -1,5 +1,6 @@
 export function createFirebaseClient({ firebase, config }) {
     let database = null;
+    let authInstance = null;
 
     function initialize() {
         if (!firebase.apps.length) firebase.initializeApp(config);
@@ -7,15 +8,15 @@ export function createFirebaseClient({ firebase, config }) {
 
     function getAuth() {
         initialize();
-        return firebase.auth();
+        if (!authInstance) authInstance = firebase.auth();
+        return authInstance;
     }
 
     return {
         async getDatabase() {
-            if (database) return database;
             const auth = getAuth();
             if (!auth.currentUser) await auth.signInAnonymously();
-            database = firebase.database();
+            if (!database) database = firebase.database();
             return database;
         },
         getAuth,

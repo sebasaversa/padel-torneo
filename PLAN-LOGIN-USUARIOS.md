@@ -149,14 +149,14 @@ Commit: `Add tournament ownership metadata`.
 
 ### 3. Inicio de sesión y experiencia de sesión
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso.
 
-- `[ ]` Crear pantalla/modal de sesión para Google, email/contraseña y cerrar sesión.
+- `[x]` Crear pantalla/modal de sesión para Google, email/contraseña y cerrar sesión.
 - `[ ]` Mantener entrada por link como espectador sin exigir una cuenta.
 - `[x]` Preparar una sesión que conserva cuentas existentes y usa identidad anónima sólo cuando corresponda.
-- `[ ]` Mostrar nombre, rol y estado de sesión en la interfaz.
-- `[ ]` Manejar errores de credenciales sin revelar información sensible.
-- `[ ]` Agregar flujo de recuperación de contraseña para admins.
+- `[~]` Mostrar nombre y estado de sesión en la interfaz; el rol se incorpora al bootstrap del super admin.
+- `[x]` Manejar errores de credenciales sin revelar información sensible.
+- `[x]` Agregar flujo de recuperación de contraseña para admins.
 - `[ ]` Validar accesibilidad y uso desde celular.
 
 Criterio de finalización: un admin puede iniciar/cerrar sesión y un espectador puede abrir un link sin cuenta.

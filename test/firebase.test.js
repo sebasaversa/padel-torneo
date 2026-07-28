@@ -9,10 +9,17 @@ test('inicializa Firebase una sola vez y reutiliza la base', async () => {
     let initialized = 0;
     let signedIn = 0;
     const database = { ref: () => ({}) };
+    const auth = {
+        currentUser: null,
+        signInAnonymously: async () => {
+            signedIn += 1;
+            auth.currentUser = { uid: 'anonymous-user', isAnonymous: true };
+        }
+    };
     const firebase = {
         apps: [],
         initializeApp: () => { initialized += 1; firebase.apps.push({}); },
-        auth: () => ({ signInAnonymously: async () => { signedIn += 1; } }),
+        auth: () => auth,
         database: () => database
     };
     firebase.database.ServerValue = { TIMESTAMP: 'timestamp' };

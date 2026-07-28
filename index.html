@@ -24,6 +24,8 @@
             <button class="btn btn-primary" id="create-shared-button">☁️ Crear torneo compartido</button>
             <button class="btn btn-secondary" id="history-button">🕘 Historial de torneos</button>
             <button class="btn btn-secondary" id="home-button" hidden>← Inicio</button>
+            <button class="btn btn-secondary" id="auth-button">🔐 Iniciar sesión</button>
+            <button class="btn btn-secondary" id="sign-out-button" hidden>↪ Cerrar sesión</button>
             <button class="btn btn-primary" id="share-button">🔗 Compartir link</button>
             <button class="btn btn-secondary" id="undo-button" disabled>↩ Deshacer</button>
             <button class="btn btn-secondary" id="summary-button">🏁 Resumen</button>
@@ -36,6 +38,7 @@
         <div id="sync-status" style="font-size:0.85rem;color:var(--muted);margin-bottom:8px;" aria-live="polite">Guardado en este dispositivo</div>
         <div id="presence-status" style="font-size:0.82rem;color:var(--muted);margin-bottom:8px;" aria-live="polite" hidden></div>
         <div id="identity-status" class="identity-status" hidden aria-live="polite"></div>
+        <div id="auth-status" class="auth-status" aria-live="polite"></div>
         <div id="progress-text" style="font-size:0.85rem;color:var(--muted);"></div>
         <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
     </div>
@@ -193,6 +196,23 @@
         <div class="activity-list" id="activity-list"></div>
         <div class="modal-actions">
             <button class="btn btn-secondary" type="button" id="close-activity">Cerrar</button>
+        </div>
+    </div>
+</div>
+<div class="modal" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" hidden>
+    <div class="modal-card">
+        <h2 id="auth-modal-title">Iniciar sesión</h2>
+        <p>Los administradores ingresan con su cuenta. Para mirar o jugar desde un link no necesitás iniciar sesión.</p>
+        <button class="btn btn-secondary auth-google-button" id="sign-in-google-button" type="button">G Continuar con Google</button>
+        <div class="auth-divider"><span>o con email y contraseña</span></div>
+        <label for="auth-email-input">Email</label>
+        <input type="email" id="auth-email-input" autocomplete="email" inputmode="email" placeholder="admin@ejemplo.com">
+        <label for="auth-password-input">Contraseña</label>
+        <input type="password" id="auth-password-input" autocomplete="current-password" placeholder="Tu contraseña">
+        <button class="btn btn-primary auth-email-button" id="sign-in-email-button" type="button">Iniciar sesión</button>
+        <button class="btn btn-secondary auth-reset-button" id="reset-password-button" type="button">Olvidé mi contraseña</button>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" type="button" id="close-auth-modal">Cancelar</button>
         </div>
     </div>
 </div>
