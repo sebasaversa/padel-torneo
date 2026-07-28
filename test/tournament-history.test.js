@@ -6,6 +6,18 @@ import {
     normalizeTournamentHistory,
     upsertTournamentHistory
 } from '../src/services/tournament-history.js';
+import { filterTournamentCatalog } from '../src/services/tournament-catalog.js';
+
+test('segmenta el catálogo por propiedad, asignación y rol', () => {
+    const entries = [
+        { id: 'own', ownerUid: 'admin', admins: {}, deletedAt: null },
+        { id: 'assigned', ownerUid: 'other', admins: { admin: true }, deletedAt: null },
+        { id: 'deleted', ownerUid: 'admin', admins: {}, deletedAt: 1 }
+    ];
+    assert.deepEqual(filterTournamentCatalog(entries, { uid: 'admin', role: 'admin' }).map(entry => entry.id), ['own', 'assigned']);
+    assert.equal(filterTournamentCatalog(entries, { uid: 'super', role: 'superAdmin' }).length, 3);
+    assert.equal(filterTournamentCatalog(entries, { role: '' }).length, 0);
+});
 import { buildTournamentHistoryMarkup } from '../src/ui/components/tournament-history.js';
 import { buildTournamentCatalog } from '../src/services/tournament-catalog.js';
 

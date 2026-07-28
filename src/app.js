@@ -2,7 +2,7 @@ import { createStateStore, createTournamentState } from './state/store.js';
 import { createDefaultState, normalizeState } from './state/model.js';
 import { createLocalStorageStore } from './services/local-storage.js';
 import { createTournamentHistoryStore } from './services/tournament-history.js';
-import { loadTournamentCatalog } from './services/tournament-catalog.js';
+import { filterTournamentCatalog, loadTournamentCatalog } from './services/tournament-catalog.js';
 import {
     createAutomaticRound as createFixtureRound,
     generateSchedule as buildSchedule,
@@ -166,6 +166,7 @@ import { createAppController } from './app/app-controller.js';
         }
         renderAuthStatus();
         await migrateLegacyTournamentIfNeeded();
+        if (!tournamentId) loadSharedTournamentCatalog();
     }
 
     async function migrateLegacyTournamentIfNeeded() {
@@ -421,7 +422,8 @@ import { createAppController } from './app/app-controller.js';
         if (tournamentId) return;
         try {
             const database = await ensureFirebase();
-            sharedTournamentCatalog = await loadTournamentCatalog(database, tournamentHistoryStore.load());
+            const catalog = await loadTournamentCatalog(database, tournamentHistoryStore.load());
+            sharedTournamentCatalog = filterTournamentCatalog(catalog, { uid: sessionUser?.uid, role: sessionRole });
             renderPreviousTournaments();
         } catch (error) {
             console.error(error);
