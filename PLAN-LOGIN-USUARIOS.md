@@ -77,7 +77,7 @@ No se guardarán contraseñas en Realtime Database ni en GitHub.
 
 ### 1. Identidad inicial del super admin `[!]`
 
-Hace falta la dirección de Gmail con la que iniciará sesión el super admin. Se usará una única vez para asignar, mediante un proceso seguro, la custom claim inicial. No se pondrá la dirección en el código público.
+La dirección de Gmail del super admin fue confirmada por el super admin y se usará una única vez para asignar, mediante un proceso seguro, la custom claim inicial. No se guarda esa dirección en el código público ni en este documento.
 
 ### 2. Edición de parejas por participantes `[!]`
 
@@ -101,29 +101,31 @@ Propuesta: el super admin crea usuarios de tipo admin con email, contraseña tem
 
 ### 0. Planificación, respaldo y decisiones
 
-Estado: `[x]` Plan creada; `[!]` faltan las decisiones indicadas arriba.
+Estado: `[~]` En curso; quedan tres decisiones de producto antes de restringir permisos.
 
 - `[x]` Documentar roles, permisos y alcance.
 - `[x]` Documentar la necesidad de Cloud Functions/Admin SDK para gestionar usuarios de manera segura.
 - `[x]` Proponer el modelo de datos compatible con torneos existentes.
-- `[ ]` Confirmar el email de Google del super admin.
+- `[x]` Confirmar el email de Google del super admin (guardado fuera del repositorio).
 - `[ ]` Confirmar el alcance exacto de edición de parejas por participantes.
 - `[ ]` Confirmar borrado lógico o físico de torneos.
 - `[ ]` Confirmar el procedimiento de contraseñas iniciales de admins.
-- `[ ]` Crear un tag de respaldo previo a la implementación.
+- `[x]` Crear el tag de respaldo `pre-authentication-roles` previo a la implementación.
 
 Commit: `Add authentication and roles implementation plan`.
 
 ### 1. Preparar Firebase Authentication y Cloud Functions
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso.
 
 - `[ ]` Activar Google y Email/Password en Firebase Authentication.
-- `[ ]` Pasar el proyecto Firebase a Blaze y configurar alertas de presupuesto.
-- `[ ]` Inicializar Firebase CLI y Cloud Functions con Node 22.
-- `[ ]` Agregar emuladores locales de Authentication, Realtime Database y Functions.
-- `[ ]` Agregar scripts de desarrollo, test y deploy sin afectar GitHub Pages.
-- `[ ]` Documentar variables de configuración y prohibir secretos en el repositorio.
+- `[x]` Pasar el proyecto Firebase a Blaze.
+- `[ ]` Configurar alertas de presupuesto en Google Cloud.
+- `[x]` Inicializar Firebase CLI y Cloud Functions con Node 22.
+- `[x]` Agregar emuladores locales de Authentication, Realtime Database y Functions.
+- `[x]` Agregar scripts de desarrollo, test y deploy sin afectar GitHub Pages.
+- `[x]` Documentar variables de configuración y prohibir secretos en el repositorio.
+- `[x]` Validar en local que Authentication, Realtime Database y Functions inician mediante emuladores.
 
 Criterio de finalización: las Functions se ejecutan localmente con emuladores y la aplicación actual sigue funcionando sin cambios de permisos.
 
@@ -136,7 +138,7 @@ Estado: `[ ]` Pendiente.
 - `[ ]` Crear servicios para perfiles de usuario y metadata de torneo.
 - `[ ]` Al crear un torneo, registrar `ownerUid`, `admins` y timestamps.
 - `[ ]` Crear una migración perezosa: un torneo anterior recibe metadata mínima al ser abierto por un super admin.
-- `[ ]` Definir qué ocurre con torneos existentes que no tienen propietario (asignación manual o super admin como administrador).
+- `[ ]` Definir qué ocurre con torneos existentes que no tienen propietario (Decidido: super admin como administrador).
 - `[ ]` Agregar tests de compatibilidad con estados y torneos existentes.
 
 Criterio de finalización: ningún link ni estado previo se rompe y los torneos nuevos tienen un propietario inequívoco.

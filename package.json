@@ -10,9 +10,14 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test"
+    "test": "node --test",
+    "emulators": "firebase emulators:start",
+    "emulators:export": "firebase emulators:export .firebase-emulator-data",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:rules": "firebase deploy --only database"
   },
   "devDependencies": {
+    "firebase-tools": "^15.24.0",
     "vite": "^7.0.0"
   }
 }

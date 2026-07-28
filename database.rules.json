@@ -1,0 +1,10 @@
+{
+  "rules": {
+    "tournaments": {
+      "$tournamentId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
