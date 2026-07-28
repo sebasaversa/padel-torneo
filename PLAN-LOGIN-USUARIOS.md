@@ -152,12 +152,12 @@ Commit: `Add tournament ownership metadata`.
 Estado: `[~]` En curso.
 
 - `[x]` Crear pantalla/modal de sesión para Google, email/contraseña y cerrar sesión.
-- `[ ]` Mantener entrada por link como espectador sin exigir una cuenta.
+- `[x]` Mantener entrada por link como espectador sin exigir una cuenta.
 - `[x]` Preparar una sesión que conserva cuentas existentes y usa identidad anónima sólo cuando corresponda.
 - `[~]` Mostrar nombre y estado de sesión en la interfaz; el rol se incorpora al bootstrap del super admin.
 - `[x]` Manejar errores de credenciales sin revelar información sensible.
 - `[x]` Agregar flujo de recuperación de contraseña para admins.
-- `[ ]` Validar accesibilidad y uso desde celular.
+- `[x]` Validar accesibilidad y uso desde celular.
 
 Criterio de finalización: un admin puede iniciar/cerrar sesión y un espectador puede abrir un link sin cuenta.
 
