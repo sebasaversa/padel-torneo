@@ -9,6 +9,7 @@ import {
     normalizeAdminUpdate,
     serializeUserRecord
 } from './admin-users.js';
+import { getSuperAdminAuthorization, isAdminAccount } from './authorization.js';
 import { buildSuperAdminProfile, isConfiguredSuperAdmin } from './super-admin.js';
 
 if (!getApps().length) initializeApp();
@@ -16,11 +17,9 @@ if (!getApps().length) initializeApp();
 const superAdminEmail = defineSecret('SUPER_ADMIN_EMAIL');
 
 function requireSuperAdmin(request) {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Iniciá sesión para continuar.');
-    if (request.auth.token.platformRole !== 'superAdmin') {
-        throw new HttpsError('permission-denied', 'Sólo el super admin puede administrar usuarios.');
-    }
-    return request.auth;
+    const authorization = getSuperAdminAuthorization(request.auth);
+    if (!authorization.allowed) throw new HttpsError(authorization.code, authorization.message);
+    return authorization.auth;
 }
 
 async function logAdminActivity(auth, action, targetUid, details = {}) {
@@ -113,7 +112,7 @@ export const deleteAdminUser = onCall(async request => {
     if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
     if (uid === request.auth.uid) throw new HttpsError('failed-precondition', 'No podés eliminar tu propia cuenta.');
     const user = await getAuth().getUser(uid);
-    if (user.customClaims?.platformRole !== 'admin') {
+    if (!isAdminAccount(user)) {
         throw new HttpsError('permission-denied', 'Sólo se pueden eliminar cuentas de admin.');
     }
     await getAuth().deleteUser(uid);
@@ -135,7 +134,7 @@ export const generateAdminPasswordResetLink = onCall(async request => {
     const uid = typeof request.data?.uid === 'string' ? request.data.uid : '';
     if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
     const user = await getAuth().getUser(uid);
-    if (user.customClaims?.platformRole !== 'admin') {
+    if (!isAdminAccount(user)) {
         throw new HttpsError('permission-denied', 'Sólo se pueden recuperar cuentas de admin.');
     }
     const link = await getAuth().generatePasswordResetLink(user.email);

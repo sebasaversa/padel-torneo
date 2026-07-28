@@ -165,7 +165,7 @@ Commit: `Add Firebase sign-in experience`.
 
 ### 4. Bootstrap del super admin y funciones de gestión de usuarios
 
-Estado: `[~]` En curso.
+Estado: `[x]` Completada.
 
 - `[x]` Implementar una Function de bootstrap protegida por el secreto `SUPER_ADMIN_EMAIL`.
 - `[x]` Configurar el secreto, desplegar la Function y asignar la custom claim inicial del super admin.
@@ -173,7 +173,7 @@ Estado: `[~]` En curso.
 - `[x]` Implementar Functions para restablecer contraseñas o generar un enlace seguro de recuperación.
 - `[x]` Crear el panel “Usuarios” exclusivo del super admin.
 - `[x]` Registrar en actividad administrativa quién realizó cada cambio.
-- `[ ]` Agregar pruebas de autorización de cada Function.
+- `[x]` Agregar pruebas de autorización de cada Function.
 
 Criterio de finalización: sólo el super admin puede administrar cuentas y ninguna operación privilegiada expone credenciales al cliente.
 
