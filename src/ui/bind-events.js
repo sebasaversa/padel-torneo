@@ -29,6 +29,10 @@ export function bindStaticUIEvents(actions) {
     click('identity-choose-other', actions.showIdentityChoice);
     click('identity-confirm-button', actions.confirmIdentitySelection);
     click('close-activity', actions.closeActivityModal);
+    document.getElementById('tournament-history-list')?.addEventListener('click', event => {
+        const button = event.target.closest('[data-open-tournament]');
+        if (button) actions.openPreviousTournament(button.dataset.openTournament);
+    });
     document.getElementById('player-count')?.addEventListener('change', event => actions.setPlayerCount(parseInt(event.target.value, 10)));
     document.getElementById('round-count')?.addEventListener('change', event => actions.setRoundCount(parseInt(event.target.value, 10)));
     document.getElementById('round-count')?.addEventListener('keydown', event => {

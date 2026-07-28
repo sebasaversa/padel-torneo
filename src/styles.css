@@ -197,6 +197,29 @@
             font-size: 0.85rem;
             font-weight: 700;
         }
+        .tournament-history-description {
+            margin: -4px 0 12px;
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+        .tournament-history-list {
+            display: grid;
+            gap: 8px;
+        }
+        .tournament-history-item {
+            width: 100%;
+            text-align: left;
+        }
+        .tournament-history-item strong,
+        .tournament-history-item span {
+            display: block;
+        }
+        .tournament-history-item span {
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 0.8rem;
+            font-weight: 400;
+        }
         .players-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));

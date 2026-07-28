@@ -1,6 +1,7 @@
 import { createStateStore, createTournamentState } from './state/store.js';
 import { createDefaultState, normalizeState } from './state/model.js';
 import { createLocalStorageStore } from './services/local-storage.js';
+import { createTournamentHistoryStore } from './services/tournament-history.js';
 import {
     createAutomaticRound as createFixtureRound,
     generateSchedule as buildSchedule,
@@ -34,6 +35,7 @@ import { renderPlayerList } from './ui/components/player-list.js';
 import { renderLeaderboard } from './ui/components/leaderboard.js';
 import { renderRoundCards } from './ui/components/round-card.js';
 import { renderTournamentToolbar } from './ui/components/toolbar.js';
+import { renderTournamentHistory } from './ui/components/tournament-history.js';
 import { renderSummaryModal, setModalOpen } from './ui/components/modal.js';
 import { bindStaticUIEvents } from './ui/bind-events.js';
 import { createAppController } from './app/app-controller.js';
@@ -52,6 +54,7 @@ import { createAppController } from './app/app-controller.js';
     let resolvePlayerChange = null;
     const MAX_UNDO_STEPS = 20;
     const localStateStore = createLocalStorageStore('padel-torneo');
+    const tournamentHistoryStore = createTournamentHistoryStore(createLocalStorageStore('padel-torneo-history'));
     const firebaseConfig = {
         apiKey: 'AIzaSyAEWG54OzZ7QMHb6otPJTLwuE8ttbBNnPc',
         authDomain: 'padel-torneo-ec30a.firebaseapp.com',
@@ -74,6 +77,7 @@ import { createAppController } from './app/app-controller.js';
     let identityPromptShown = false;
     let claimsLoaded = false;
     let sharedStateLoaded = false;
+    let historyRecordedForTournament = false;
     const presenceId = (() => {
         const key = 'padel-torneo-device-id';
         const generatedId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
@@ -126,6 +130,35 @@ import { createAppController } from './app/app-controller.js';
 
     function updateTournamentHeader() {
         if (!tournamentId) setPresenceStatus(0);
+    }
+
+    function formatHistoryLastOpened(timestamp) {
+        if (!timestamp) return '';
+        return `Abierto ${new Intl.DateTimeFormat('es-AR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(timestamp))}`;
+    }
+
+    function rememberCurrentTournament() {
+        if (!tournamentId || historyRecordedForTournament) return;
+        tournamentHistoryStore.remember({
+            id: tournamentId,
+            name: tournamentState.value.tournamentName,
+            date: tournamentState.value.tournamentDate
+        });
+        historyRecordedForTournament = true;
+    }
+
+    function renderPreviousTournaments() {
+        const container = document.getElementById('tournament-history-list');
+        if (!container) return;
+        renderTournamentHistory(container, tournamentId ? [] : tournamentHistoryStore.load(), {
+            formatDate: formatTournamentDate,
+            formatLastOpened: formatHistoryLastOpened
+        });
+    }
+
+    function openPreviousTournament(id) {
+        if (!id) return;
+        location.assign(createSharedTournamentUrl(location.origin, location.pathname, id));
     }
 
     function updateSubtitle() {
@@ -565,6 +598,7 @@ import { createAppController } from './app/app-controller.js';
             if (tournamentIdentity) tournamentIdentity.disconnect();
             if (activityLog) activityLog.disconnect();
             tournamentId = id;
+            historyRecordedForTournament = false;
             actorPlayerId = null;
             claimedPlayers = {};
             identityPromptShown = false;
@@ -589,6 +623,7 @@ import { createAppController } from './app/app-controller.js';
                     updateUndoButton();
                 }
                 setState(remoteState);
+                rememberCurrentTournament();
                 maybeRequestIdentity();
                 }
             });
@@ -989,6 +1024,7 @@ import { createAppController } from './app/app-controller.js';
         updateIdentityStatus();
         updateUndoButton();
         updateSubtitle();
+        renderPreviousTournaments();
         renderPlayers();
         renderRounds();
         calculateStats();
@@ -1012,7 +1048,7 @@ import { createAppController } from './app/app-controller.js';
     changePlayerCount, changeRoundCount, closeActivityModal, closeSummaryModal,
     confirmIdentitySelection, confirmPlayerChange, confirmTournamentName,
     continueIdentitySelection, copyTournamentSummary, createSharedTournament,
-    enterAsSpectator, exportJSON, importJSON, openActivityModal, openSummaryModal,
+    enterAsSpectator, exportJSON, importJSON, openActivityModal, openPreviousTournament, openSummaryModal,
     resetAll, resetSchedule, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
     shareState, shareTournamentSummary, showIdentityChoice, undoLastChange
     });

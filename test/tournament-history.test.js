@@ -1,0 +1,49 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+
+import {
+    createTournamentHistoryStore,
+    normalizeTournamentHistory,
+    upsertTournamentHistory
+} from '../src/services/tournament-history.js';
+import { buildTournamentHistoryMarkup } from '../src/ui/components/tournament-history.js';
+
+test('normaliza y ordena torneos anteriores', () => {
+    const history = normalizeTournamentHistory([
+        { id: 'old', name: 'Anterior', lastOpenedAt: 10 },
+        { id: 'recent', name: 'Reciente', date: '2026-07-28', lastOpenedAt: 20 },
+        { name: 'Sin id', lastOpenedAt: 30 }
+    ]);
+    assert.deepEqual(history.map(entry => entry.id), ['recent', 'old']);
+});
+
+test('actualiza un torneo existente sin duplicarlo', () => {
+    const history = upsertTournamentHistory([
+        { id: 'one', name: 'Viejo', lastOpenedAt: 1 },
+        { id: 'two', name: 'Otro', lastOpenedAt: 2 }
+    ], { id: 'one', name: 'Actualizado', date: '2026-07-28' }, 3);
+    assert.deepEqual(history.map(entry => entry.id), ['one', 'two']);
+    assert.equal(history[0].name, 'Actualizado');
+});
+
+test('guarda el historial mediante el almacenamiento local', () => {
+    let value = null;
+    const store = createTournamentHistoryStore({
+        load: () => value,
+        save: nextValue => { value = nextValue; }
+    }, { now: () => 42 });
+    store.remember({ id: 'abc', name: 'Viernes', date: '2026-07-28' });
+    assert.deepEqual(store.load(), [{ id: 'abc', name: 'Viernes', date: '2026-07-28', lastOpenedAt: 42 }]);
+});
+
+test('genera entradas seguras y navegables para el historial', () => {
+    const markup = buildTournamentHistoryMarkup([{
+        id: 'torneo-1', name: '<Viernes>', date: '2026-07-28', lastOpenedAt: 42
+    }], {
+        formatDate: () => '28 de julio',
+        formatLastOpened: () => 'Abierto recién'
+    });
+    assert.match(markup, /data-open-tournament="torneo-1"/);
+    assert.match(markup, /&lt;Viernes&gt;/);
+    assert.match(markup, /28 de julio · Abierto recién/);
+});
