@@ -426,12 +426,22 @@
         <div class="player-count-row">
             <label for="player-count">Cantidad:</label>
             <div class="count-controls">
-                <button class="btn btn-secondary btn-sm" onclick="changePlayerCount(-1)">−</button>
+                <button class="btn btn-secondary btn-sm" onclick="changePlayerCount(-1)" aria-label="Quitar jugador">−</button>
                 <input type="number" id="player-count" min="4" max="16" value="9"
                        onchange="setPlayerCount(parseInt(this.value, 10))">
-                <button class="btn btn-secondary btn-sm" onclick="changePlayerCount(1)">+</button>
+                <button class="btn btn-secondary btn-sm" onclick="changePlayerCount(1)" aria-label="Agregar jugador">+</button>
             </div>
             <span class="count-hint" id="count-hint"></span>
+        </div>
+        <div class="player-count-row">
+            <label for="round-count">Rondas:</label>
+            <div class="count-controls">
+                <button class="btn btn-secondary btn-sm" onclick="changeRoundCount(-1)" aria-label="Quitar una ronda">−</button>
+                <input type="number" id="round-count" min="1" max="50" value="9"
+                       onchange="setRoundCount(parseInt(this.value, 10))">
+                <button class="btn btn-secondary btn-sm" onclick="changeRoundCount(1)" aria-label="Agregar una ronda">+</button>
+            </div>
+            <span class="count-hint" id="round-count-hint"></span>
         </div>
         <div class="player-count-row">
             <label for="games-per-set">Games por set:</label>
@@ -557,6 +567,8 @@
     const MAX_COURTS = 2;
     const MIN_GAMES_PER_SET = 1;
     const MAX_GAMES_PER_SET = 20;
+    const MIN_ROUNDS = 1;
+    const MAX_ROUNDS = 50;
 
     let numPlayers = 9;
     let gamesPerSet = 4;
@@ -706,25 +718,14 @@
         return { id: roundIndex, matches };
     }
 
-    function generateSchedule() {
-        schedule = Array.from({ length: getNumRounds(numPlayers) }, (_, roundIndex) =>
+    function generateSchedule(roundCount = getNumRounds(numPlayers)) {
+        const rounds = Math.max(MIN_ROUNDS, Math.min(MAX_ROUNDS, roundCount));
+        schedule = Array.from({ length: rounds }, (_, roundIndex) =>
             createAutomaticRound(roundIndex));
     }
 
     function addRound() {
-        if (getCourts(numPlayers) === 0) {
-            showToast('Se necesitan al menos 4 jugadores para agregar partidos.');
-            return;
-        }
-        rememberStateForUndo();
-        const roundIndex = schedule.length;
-        schedule.push(createAutomaticRound(roundIndex));
-        collapsedRounds[roundIndex] = false;
-        saveLocal();
-        logActivity(`agregó la ronda ${roundIndex + 1}`);
-        renderAll();
-        const matches = schedule[roundIndex].matches.length;
-        showToast(`Ronda ${roundIndex + 1} agregada · ${matches} partido${matches === 1 ? '' : 's'} nuevo${matches === 1 ? '' : 's'}`);
+        setRoundCount(schedule.length + 1);
     }
 
     function getTodayISODate() {
@@ -780,11 +781,12 @@
         document.getElementById('subtitle').textContent =
             `${numPlayers} jugadores · ${courts} cancha${courts > 1 ? 's' : ''} · ${rounds} rondas · ${restText} · Sets a ${gamesPerSet} games`;
         document.getElementById('count-hint').textContent =
+            `${courts} cancha${courts > 1 ? 's' : ''} · ${restText}`;
+        document.getElementById('round-count').value = rounds;
+        document.getElementById('round-count-hint').textContent =
             rounds > plannedRounds
                 ? `${rounds - plannedRounds} ronda${rounds - plannedRounds === 1 ? '' : 's'} extra agregada${rounds - plannedRounds === 1 ? '' : 's'}`
-                : rest > 0
-                    ? `${rounds} rondas para rotar el descanso`
-                    : `${rounds} rondas de rotación de parejas`;
+                : 'Cantidad de rondas independiente de los jugadores';
         document.getElementById('matches-title').textContent = `3. Partidos (a ${gamesPerSet} games)`;
     }
 
@@ -800,6 +802,10 @@
 
     function changePlayerCount(delta) {
         setPlayerCount(numPlayers + delta);
+    }
+
+    function changeRoundCount(delta) {
+        setRoundCount(schedule.length + delta);
     }
 
     function changeGamesPerSet(delta) {
@@ -842,13 +848,58 @@
         }
 
         rememberStateForUndo();
+        const currentRoundCount = schedule.length || getNumRounds(numPlayers);
         resizePlayers(newCount);
-        generateSchedule();
+        generateSchedule(currentRoundCount);
         collapsedRounds = {};
         saveLocal();
         logActivity(`cambió la cantidad de jugadores a ${numPlayers}`);
         renderAll();
         showToast(`${newCount} jugadores · fixture actualizado`);
+    }
+
+    function setRoundCount(newCount) {
+        if (Number.isNaN(newCount)) {
+            document.getElementById('round-count').value = schedule.length;
+            return;
+        }
+        newCount = Math.max(MIN_ROUNDS, Math.min(MAX_ROUNDS, newCount));
+        const currentCount = schedule.length;
+        if (newCount === currentCount) {
+            document.getElementById('round-count').value = currentCount;
+            return;
+        }
+        if (newCount < currentCount) {
+            const roundsToRemove = schedule.slice(newCount);
+            const hasRecordedResults = roundsToRemove.some(round => round.matches.some(isMatchDone));
+            if (hasRecordedResults) {
+                document.getElementById('round-count').value = currentCount;
+                showToast('No se pueden quitar rondas que ya tienen resultados cargados.');
+                return;
+            }
+            if (!confirm(`¿Quitar las últimas ${currentCount - newCount} ronda${currentCount - newCount === 1 ? '' : 's'}?`)) {
+                document.getElementById('round-count').value = currentCount;
+                return;
+            }
+        }
+
+        rememberStateForUndo();
+        if (newCount > currentCount) {
+            for (let roundIndex = currentCount; roundIndex < newCount; roundIndex++) {
+                schedule.push(createAutomaticRound(roundIndex));
+                collapsedRounds[roundIndex] = false;
+            }
+        } else {
+            schedule = schedule.slice(0, newCount);
+            collapsedRounds = Object.fromEntries(Object.entries(collapsedRounds)
+                .filter(([index]) => parseInt(index, 10) < newCount));
+        }
+        saveLocal();
+        logActivity(`cambió la cantidad de rondas a ${newCount}`);
+        renderAll();
+        showToast(newCount > currentCount
+            ? `Ronda${newCount - currentCount === 1 ? '' : 's'} agregada${newCount - currentCount === 1 ? '' : 's'} · ${newCount} en total`
+            : `Rondas ajustadas · ${newCount} en total`);
     }
 
     function getState() {
@@ -1287,7 +1338,7 @@
             tournamentDate = getTodayISODate();
 
             // Un torneo nuevo conserva la configuración, pero siempre empieza sin resultados.
-            generateSchedule();
+            generateSchedule(schedule.length || getNumRounds(numPlayers));
             collapsedRounds = {};
             const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
             tournamentId = id;
@@ -1394,7 +1445,7 @@
         if (!confirm('¿Regenerar el fixture? Se pierden los resultados pero se mantienen los nombres.')) return;
         rememberStateForUndo();
         const savedPlayers = [...players];
-        generateSchedule();
+        generateSchedule(schedule.length || getNumRounds(numPlayers));
         players = savedPlayers;
         collapsedRounds = {};
         saveLocal();
