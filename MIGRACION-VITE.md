@@ -214,15 +214,15 @@ Progreso final: `src/main.js` inicia la aplicación; `src/app/app-controller.js`
 
 ### 9. Tests y validación de regresión
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso.
 
-- Tests de generación de fixture.
-- Tests de scores y estadísticas.
-- Tests de agregado y eliminación de rondas.
-- Tests de serialización y compatibilidad de estado.
-- Prueba manual de Firebase con dos navegadores/dispositivos.
-- Prueba responsive en celular.
-- Verificación de importación de torneos anteriores.
+- `[x]` Tests de generación de fixture.
+- `[x]` Tests de scores y estadísticas.
+- `[x]` Tests de agregado y eliminación de rondas.
+- `[x]` Tests de serialización y compatibilidad de estado.
+- `[ ]` Prueba manual de Firebase con dos navegadores/dispositivos.
+- `[~]` Prueba responsive en celular.
+- `[x]` Verificación de importación de torneos anteriores.
 
 ### 10. Deploy con GitHub Pages
 
