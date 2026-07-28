@@ -214,7 +214,7 @@ Progreso final: `src/main.js` inicia la aplicación; `src/app/app-controller.js`
 
 ### 9. Tests y validación de regresión
 
-Estado: `[~]` En curso.
+Estado: `[x]` Completada.
 
 - `[x]` Tests de generación de fixture.
 - `[x]` Tests de scores y estadísticas.
@@ -226,10 +226,10 @@ Estado: `[~]` En curso.
 
 ### 10. Deploy con GitHub Pages
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso.
 
-- Crear workflow de GitHub Actions para instalar dependencias y ejecutar `npm run build`.
-- Publicar `dist/` en GitHub Pages.
+- `[x]` Crear workflow de GitHub Actions para instalar dependencias y ejecutar `npm run build`.
+- `[ ]` Publicar `dist/` en GitHub Pages.
 - Mantener la URL pública actual.
 - Verificar que las rutas de Firebase, assets y módulos funcionen en producción.
 - No publicar una etapa incompleta.
