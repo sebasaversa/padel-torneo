@@ -118,7 +118,7 @@ Commit: `Add authentication and roles implementation plan`.
 
 Estado: `[~]` En curso.
 
-- `[ ]` Activar Google y Email/Password en Firebase Authentication.
+- `[x]` Activar Google y Email/Password en Firebase Authentication.
 - `[x]` Pasar el proyecto Firebase a Blaze.
 - `[ ]` Configurar alertas de presupuesto en Google Cloud.
 - `[x]` Inicializar Firebase CLI y Cloud Functions con Node 22.
