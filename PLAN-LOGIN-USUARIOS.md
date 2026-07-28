@@ -135,7 +135,7 @@ Commit: `Prepare Firebase authentication and functions`.
 
 Estado: `[~]` En curso.
 
-- `[ ]` Crear servicios para perfiles de usuario y metadata de torneo.
+- `[x]` Crear y probar servicios de modelo para perfiles de usuario y metadata de torneo.
 - `[x]` Crear y probar el modelo compatible de metadata de propietarios y admins por torneo.
 - `[ ]` Al crear un torneo, registrar `ownerUid`, `admins` y timestamps.
 - `[ ]` Crear una migración perezosa: un torneo anterior recibe metadata mínima al ser abierto por un super admin.
