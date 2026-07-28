@@ -19,6 +19,7 @@ import { adjustScore as getAdjustedScore, normalizeScore } from './features/scor
 import { getScoreWarning, isMatchDone, isRoundDone } from './features/scoring/validation.js';
 import { getBestStreak, getLeaderboardStats, getProgress } from './features/scoring/statistics.js';
 import { buildTournamentSummaryText } from './features/scoring/summary.js';
+import { createFirebaseClient } from './services/firebase.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -43,6 +44,7 @@ import { buildTournamentSummaryText } from './features/scoring/summary.js';
         messagingSenderId: '721713590787',
         appId: '1:721713590787:web:3df62ebcfc8841e41c5436'
     };
+    const firebaseClient = createFirebaseClient({ firebase, config: firebaseConfig });
     let tournamentId = new URLSearchParams(location.search).get('torneo');
     let realtimeDb = null;
     let tournamentRef = null;
@@ -525,7 +527,7 @@ import { buildTournamentSummaryText } from './features/scoring/summary.js';
             message,
             actor: getActorName(),
             device: getDeviceLabel(),
-            createdAt: firebase.database.ServerValue.TIMESTAMP
+            createdAt: firebaseClient.serverTimestamp()
         }).catch(() => {});
     }
 
@@ -557,9 +559,7 @@ import { buildTournamentSummaryText } from './features/scoring/summary.js';
     async function ensureFirebase() {
         if (realtimeDb) return realtimeDb;
         try {
-            if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
-            await firebase.auth().signInAnonymously();
-            realtimeDb = firebase.database();
+            realtimeDb = await firebaseClient.getDatabase();
             return realtimeDb;
         } catch (error) {
             console.error(error);
@@ -600,7 +600,7 @@ import { buildTournamentSummaryText } from './features/scoring/summary.js';
                 }
                 const remoteSignature = getStateSignature(remoteState);
                 if (remoteSignature !== lastSavedStateSignature) {
-                    undoStack = [];
+                    stateStore.clearUndo();
                     updateUndoButton();
                 }
                 applyingRemoteState = true;
@@ -637,7 +637,7 @@ import { buildTournamentSummaryText } from './features/scoring/summary.js';
         presenceUnsubscribe = () => presenceListRef.off('value', listener);
         await presenceRef.onDisconnect().remove();
         await presenceRef.set({
-            connectedAt: firebase.database.ServerValue.TIMESTAMP,
+            connectedAt: firebaseClient.serverTimestamp(),
             actorName: getActorName(),
             device: getDeviceLabel()
         });
@@ -655,7 +655,7 @@ import { buildTournamentSummaryText } from './features/scoring/summary.js';
         try {
             const state = getState();
             lastSavedStateSignature = getStateSignature(state);
-            await tournamentRef.update({ state, updatedAt: firebase.database.ServerValue.TIMESTAMP });
+            await tournamentRef.update({ state, updatedAt: firebaseClient.serverTimestamp() });
             setSyncStatus('Sincronizado en todos los dispositivos');
         } catch (error) {
             console.error(error);

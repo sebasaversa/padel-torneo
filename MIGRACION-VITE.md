@@ -146,9 +146,9 @@ Progreso final: `src/features/scoring/` concentra límites, validaciones, tabla 
 
 ### 6. Extraer servicios externos
 
-Estado: `[ ]` Pendiente.
+Estado: `[~]` En curso.
 
-- Encapsular inicialización y autenticación anónima de Firebase.
+- `[x]` Encapsular inicialización y autenticación anónima de Firebase.
 - Encapsular sincronización del estado compartido.
 - Encapsular presencia y claims de identidad.
 - Encapsular historial de actividad.
