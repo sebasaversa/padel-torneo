@@ -11,6 +11,7 @@ import {
 } from './admin-users.js';
 import { getSuperAdminAuthorization, isAdminAccount } from './authorization.js';
 import { buildTournamentDeletion, requireTournamentId } from './tournament-admin.js';
+import { buildTournamentCatalogPayload, getTournamentCatalogAuthorization } from './tournament-catalog.js';
 import { applyParticipantPairing, applyParticipantScore, normalizePairingRequest, normalizeScoreRequest } from './participant-access.js';
 import { buildSuperAdminProfile, isConfiguredSuperAdmin } from './super-admin.js';
 
@@ -172,6 +173,18 @@ export const setTournamentDeleted = onCall(async request => {
     await ref.transaction(current => buildTournamentDeletion(current, auth.uid, ServerValue.TIMESTAMP, deleted));
     await logAdminActivity(auth, deleted ? 'deleteTournament' : 'restoreTournament', tournamentId);
     return { deleted };
+});
+
+export const listTournamentCatalog = onCall(async request => {
+    const authorization = getTournamentCatalogAuthorization(request.auth);
+    if (!authorization.allowed) throw new HttpsError(authorization.code, authorization.message);
+    const snapshot = await getDatabase().ref('tournaments').get();
+    return {
+        tournaments: buildTournamentCatalogPayload(snapshot.val(), {
+            uid: authorization.auth.uid,
+            role: authorization.role
+        })
+    };
 });
 
 export const updateParticipantPairing = onCall(async request => {

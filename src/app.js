@@ -482,8 +482,10 @@ import { createAppController } from './app/app-controller.js';
             return;
         }
         try {
-            const database = await ensureFirebase();
-            const catalog = await loadTournamentCatalog(database, tournamentHistoryStore.load());
+            const catalog = await loadTournamentCatalog(
+                (...args) => firebaseClient.callFunction(...args),
+                tournamentHistoryStore.load()
+            );
             sharedTournamentCatalog = filterTournamentCatalog(catalog, { uid: sessionUser?.uid, role: sessionRole });
             renderPreviousTournaments();
         } catch (error) {

@@ -28,7 +28,7 @@ export function filterTournamentCatalog(entries, { uid = '', role = '' } = {}) {
     return entries.filter(entry => !entry.deletedAt && (entry.ownerUid === uid || entry.admins?.[uid] === true));
 }
 
-export async function loadTournamentCatalog(database, localHistory) {
-    const snapshot = await database.ref('tournaments').orderByChild('updatedAt').once('value');
-    return buildTournamentCatalog(snapshot.val(), localHistory);
+export async function loadTournamentCatalog(callFunction, localHistory) {
+    const result = await callFunction('listTournamentCatalog');
+    return buildTournamentCatalog(result?.tournaments, localHistory);
 }
