@@ -30,7 +30,11 @@ export function renderTournamentToolbar({ tournamentId, tournamentName, tourname
         : 'Cantidad de rondas independiente de los jugadores';
     const courtCount = document.getElementById('court-count');
     courtCount.value = courts;
-    courtCount.querySelector('option[value="2"]').disabled = availableCourts < 2;
+    courtCount.max = availableCourts;
+    const decreaseCourtButton = document.getElementById('court-count-decrease');
+    const increaseCourtButton = document.getElementById('court-count-increase');
+    if (decreaseCourtButton) decreaseCourtButton.disabled = courts <= 1;
+    if (increaseCourtButton) increaseCourtButton.disabled = courts >= availableCourts;
     document.getElementById('court-count-hint').textContent = availableCourts < 2
         ? 'Con esta cantidad de jugadores se puede usar 1 cancha.'
         : 'Elegí cuántas canchas se usan en simultáneo.';
