@@ -70,10 +70,9 @@
         <div class="player-count-row">
             <label for="court-count">Canchas:</label>
             <div class="count-controls">
-                <select id="court-count" aria-describedby="court-count-hint">
-                    <option value="1">1 cancha</option>
-                    <option value="2" selected>2 canchas</option>
-                </select>
+                <button class="btn btn-secondary btn-sm" id="court-count-decrease" aria-label="Quitar una cancha">−</button>
+                <input type="number" id="court-count" min="1" max="2" value="2" aria-describedby="court-count-hint">
+                <button class="btn btn-secondary btn-sm" id="court-count-increase" aria-label="Agregar una cancha">+</button>
             </div>
             <span class="count-hint" id="court-count-hint"></span>
         </div>

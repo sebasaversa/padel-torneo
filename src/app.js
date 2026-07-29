@@ -163,7 +163,7 @@ import { createAppController } from './app/app-controller.js';
             : 'Modo invitado: podés entrar a un torneo compartido desde su link.';
         const canConfigure = !tournamentId || ['admin', 'superAdmin'].includes(sessionRole);
         ['player-count', 'round-count', 'court-count', 'games-per-set', 'player-count-decrease', 'player-count-increase',
-            'round-count-decrease', 'round-count-increase', 'games-decrease', 'games-increase', 'reset-schedule-button', 'reset-all-button']
+            'round-count-decrease', 'round-count-increase', 'court-count-decrease', 'court-count-increase', 'games-decrease', 'games-increase', 'reset-schedule-button', 'reset-all-button']
             .forEach(id => {
                 const control = document.getElementById(id);
                 if (control) control.disabled = !canConfigure;
@@ -726,6 +726,10 @@ import { createAppController } from './app/app-controller.js';
 
     function changeRoundCount(delta) {
         setRoundCount(tournamentState.value.schedule.length + delta);
+    }
+
+    function changeCourtCount(delta) {
+        setCourtCount(tournamentState.value.numCourts + delta);
     }
 
     function setCourtCount(newCount) {
@@ -1669,7 +1673,7 @@ import { createAppController } from './app/app-controller.js';
 
     function bindApplicationEvents() {
     bindStaticUIEvents({
-    cancelPlayerChange, cancelTournamentName, changeGamesPerSet, changePlayerCount,
+    cancelPlayerChange, cancelTournamentName, changeCourtCount, changeGamesPerSet, changePlayerCount,
     changeRoundCount, closeActivityModal, closeSummaryModal,
     confirmIdentitySelection, confirmPlayerChange, confirmTournamentName,
     continueIdentitySelection, copyTournamentSummary, createSharedTournament,

@@ -34,6 +34,8 @@ export function bindStaticUIEvents(actions) {
     click('player-count-increase', () => actions.changePlayerCount(1));
     click('round-count-decrease', () => actions.changeRoundCount(-1));
     click('round-count-increase', () => actions.changeRoundCount(1));
+    click('court-count-decrease', () => actions.changeCourtCount(-1));
+    click('court-count-increase', () => actions.changeCourtCount(1));
     click('games-decrease', () => actions.changeGamesPerSet(-1));
     click('games-increase', () => actions.changeGamesPerSet(1));
     click('cancel-tournament-name', actions.cancelTournamentName);
@@ -72,6 +74,12 @@ export function bindStaticUIEvents(actions) {
         event.target.blur();
     });
     document.getElementById('court-count')?.addEventListener('change', event => actions.setCourtCount(parseInt(event.target.value, 10)));
+    document.getElementById('court-count')?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        actions.setCourtCount(parseInt(event.target.value, 10));
+        event.target.blur();
+    });
     document.getElementById('games-per-set')?.addEventListener('input', event => actions.setGamesPerSet(parseInt(event.target.value, 10)));
     document.getElementById('tournament-name-input')?.addEventListener('keydown', event => {
         if (event.key === 'Enter') actions.confirmTournamentName();
