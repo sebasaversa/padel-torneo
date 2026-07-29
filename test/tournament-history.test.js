@@ -73,7 +73,7 @@ test('permite seleccionar varios torneos activos para borrado en lote', () => {
         { id: 'eliminado', name: 'Sábado', date: '2026-07-29', deletedAt: 1 }
     ], { canDelete: true, selectedIds: new Set(['activo']) });
     assert.match(markup, /data-select-tournament="activo" checked/);
-    assert.doesNotMatch(markup, /data-select-tournament="eliminado"/);
+    assert.match(markup, /data-select-tournament="eliminado"/);
 });
 
 test('ofrece eliminación definitiva sólo a super admin para torneos ya borrados', () => {

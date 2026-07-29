@@ -323,16 +323,21 @@ import { createAppController } from './app/app-controller.js';
         setModalOpen('delete-tournament-modal', true);
     }
 
-    function requestPermanentTournamentDeletion(id) {
+    function requestPermanentTournamentDeletion(ids) {
         if (sessionRole !== 'superAdmin') return;
-        const tournament = sharedTournamentCatalog.find(entry => entry.id === id);
-        if (!tournament?.deletedAt) return;
-        pendingTournamentDeletion = [tournament];
+        const tournaments = [...new Set(typeof ids === 'string' ? [ids] : ids)]
+            .map(id => sharedTournamentCatalog.find(entry => entry.id === id))
+            .filter(tournament => tournament?.deletedAt);
+        if (!tournaments.length) return;
+        pendingTournamentDeletion = tournaments;
         pendingTournamentDeletionMode = 'permanent';
-        document.getElementById('delete-tournament-modal-title').textContent = '¿Eliminar definitivamente?';
-        document.getElementById('delete-tournament-description').textContent = 'Esta acción elimina el torneo y sus datos de forma permanente. No se puede deshacer ni restaurar.';
-        document.getElementById('confirm-delete-tournament-button').textContent = '⚠️ Eliminar definitivamente';
-        renderDeleteTournamentDetails([tournament]);
+        const plural = tournaments.length !== 1;
+        document.getElementById('delete-tournament-modal-title').textContent = plural ? `¿Eliminar definitivamente ${tournaments.length} torneos?` : '¿Eliminar definitivamente?';
+        document.getElementById('delete-tournament-description').textContent = plural
+            ? 'Esta acción elimina los torneos y sus datos de forma permanente. No se puede deshacer ni restaurar.'
+            : 'Esta acción elimina el torneo y sus datos de forma permanente. No se puede deshacer ni restaurar.';
+        document.getElementById('confirm-delete-tournament-button').textContent = plural ? `⚠️ Eliminar ${tournaments.length} torneos` : '⚠️ Eliminar definitivamente';
+        renderDeleteTournamentDetails(tournaments);
         setModalOpen('delete-tournament-modal', true);
     }
 
@@ -344,6 +349,10 @@ import { createAppController } from './app/app-controller.js';
         requestDeleteTournaments(selectedTournamentDeletionIds);
     }
 
+    function requestPermanentlyDeleteSelectedTournaments() {
+        requestPermanentTournamentDeletion(selectedTournamentDeletionIds);
+    }
+
     function toggleTournamentDeletionSelection(id, selected) {
         if (sessionRole !== 'superAdmin') return;
         if (selected) selectedTournamentDeletionIds.add(id);
@@ -353,7 +362,7 @@ import { createAppController } from './app/app-controller.js';
 
     function selectAllTournamentsForDeletion() {
         if (sessionRole !== 'superAdmin') return;
-        selectedTournamentDeletionIds = new Set(sharedTournamentCatalog.filter(entry => !entry.deletedAt).map(entry => entry.id));
+        selectedTournamentDeletionIds = new Set(sharedTournamentCatalog.map(entry => entry.id));
         renderPreviousTournaments();
     }
 
@@ -366,11 +375,16 @@ import { createAppController } from './app/app-controller.js';
         const tournaments = pendingTournamentDeletion;
         if (!tournaments?.length || sessionRole !== 'superAdmin') return;
         if (pendingTournamentDeletionMode === 'permanent') {
+            const results = await Promise.allSettled(tournaments.map(tournament => adminUserApi.permanentlyDeleteTournament(tournament.id)));
+            const deletedCount = results.filter(result => result.status === 'fulfilled').length;
+            const failedResult = results.find(result => result.status === 'rejected');
             try {
-                await adminUserApi.permanentlyDeleteTournament(tournaments[0].id);
                 closeDeleteTournamentModal();
+                selectedTournamentDeletionIds = new Set([...selectedTournamentDeletionIds].filter(id => !tournaments.some(tournament => tournament.id === id)));
                 await loadSharedTournamentCatalog();
-                showToast('Torneo eliminado definitivamente.');
+                showToast(failedResult
+                    ? `${deletedCount} torneo${deletedCount === 1 ? '' : 's'} eliminado${deletedCount === 1 ? '' : 's'}; algunos no se pudieron eliminar.`
+                    : `${deletedCount} torneo${deletedCount === 1 ? '' : 's'} eliminado${deletedCount === 1 ? '' : 's'} definitivamente.`);
             } catch (error) { showToast(error.message || 'No se pudo eliminar definitivamente el torneo.'); }
             return;
         }
@@ -391,6 +405,22 @@ import { createAppController } from './app/app-controller.js';
         if (sessionRole !== 'superAdmin') return;
         try { await adminUserApi.setTournamentDeleted(id, false); await loadSharedTournamentCatalog(); showToast('Torneo restaurado.'); }
         catch (error) { showToast(error.message || 'No se pudo restaurar el torneo.'); }
+    }
+
+    async function restoreSelectedTournaments() {
+        if (sessionRole !== 'superAdmin') return;
+        const tournaments = sharedTournamentCatalog.filter(entry => entry.deletedAt && selectedTournamentDeletionIds.has(entry.id));
+        if (!tournaments.length) return;
+        const results = await Promise.allSettled(tournaments.map(tournament => adminUserApi.setTournamentDeleted(tournament.id, false)));
+        const restoredCount = results.filter(result => result.status === 'fulfilled').length;
+        const failedResult = results.find(result => result.status === 'rejected');
+        selectedTournamentDeletionIds = new Set([...selectedTournamentDeletionIds].filter(id => !tournaments.some(tournament => tournament.id === id)));
+        try {
+            await loadSharedTournamentCatalog();
+            showToast(failedResult
+                ? `${restoredCount} torneo${restoredCount === 1 ? '' : 's'} restaurado${restoredCount === 1 ? '' : 's'}; algunos no se pudieron restaurar.`
+                : `${restoredCount} torneo${restoredCount === 1 ? '' : 's'} restaurado${restoredCount === 1 ? '' : 's'}.`);
+        } catch (error) { showToast(error.message || 'No se pudo actualizar el historial.'); }
     }
 
     function renderAdminUsers(users) {
@@ -593,7 +623,7 @@ import { createAppController } from './app/app-controller.js';
         const container = document.getElementById('tournament-history-list');
         if (!container) return;
         const entries = tournamentId ? [] : sharedTournamentCatalog;
-        selectedTournamentDeletionIds = new Set([...selectedTournamentDeletionIds].filter(id => entries.some(entry => entry.id === id && !entry.deletedAt)));
+        selectedTournamentDeletionIds = new Set([...selectedTournamentDeletionIds].filter(id => entries.some(entry => entry.id === id)));
         const canDelete = sessionRole === 'superAdmin';
         renderTournamentHistory(container, entries, {
             formatDate: formatTournamentDate,
@@ -602,9 +632,21 @@ import { createAppController } from './app/app-controller.js';
             selectedIds: selectedTournamentDeletionIds
         });
         const batchActions = document.getElementById('tournament-batch-actions');
-        batchActions.hidden = !canDelete || !entries.some(entry => !entry.deletedAt);
+        batchActions.hidden = !canDelete || !entries.length;
         document.getElementById('tournament-selection-status').textContent = `${selectedTournamentDeletionIds.size} seleccionado${selectedTournamentDeletionIds.size === 1 ? '' : 's'}`;
-        document.getElementById('delete-selected-tournaments-button').disabled = selectedTournamentDeletionIds.size === 0;
+        const selectedEntries = entries.filter(entry => selectedTournamentDeletionIds.has(entry.id));
+        const selectedActiveCount = selectedEntries.filter(entry => !entry.deletedAt).length;
+        const selectedDeletedCount = selectedEntries.filter(entry => entry.deletedAt).length;
+        const deleteSelected = document.getElementById('delete-selected-tournaments-button');
+        deleteSelected.hidden = selectedActiveCount === 0;
+        deleteSelected.disabled = selectedActiveCount === 0;
+        deleteSelected.textContent = `🗑️ Borrar ${selectedActiveCount} seleccionado${selectedActiveCount === 1 ? '' : 's'}`;
+        const restoreSelected = document.getElementById('restore-selected-tournaments-button');
+        restoreSelected.hidden = selectedDeletedCount === 0;
+        restoreSelected.textContent = `↩️ Restaurar ${selectedDeletedCount} seleccionado${selectedDeletedCount === 1 ? '' : 's'}`;
+        const permanentlyDeleteSelected = document.getElementById('permanently-delete-selected-tournaments-button');
+        permanentlyDeleteSelected.hidden = selectedDeletedCount === 0;
+        permanentlyDeleteSelected.textContent = `⚠️ Eliminar ${selectedDeletedCount} definitivamente`;
     }
 
     async function loadSharedTournamentCatalog() {
@@ -1641,6 +1683,7 @@ import { createAppController } from './app/app-controller.js';
     , closeDeleteTournamentModal, confirmDeleteTournament, requestDeleteTournament, restoreTournament,
     toggleTournamentDeletionSelection, selectAllTournamentsForDeletion,
     clearTournamentDeletionSelection, requestDeleteSelectedTournaments, requestPermanentTournamentDeletion
+    , restoreSelectedTournaments, requestPermanentlyDeleteSelectedTournaments
     });
     }
 

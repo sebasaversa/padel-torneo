@@ -12,6 +12,8 @@ export function bindStaticUIEvents(actions) {
     click('select-all-tournaments-button', actions.selectAllTournamentsForDeletion);
     click('clear-tournament-selection-button', actions.clearTournamentDeletionSelection);
     click('delete-selected-tournaments-button', actions.requestDeleteSelectedTournaments);
+    click('restore-selected-tournaments-button', actions.restoreSelectedTournaments);
+    click('permanently-delete-selected-tournaments-button', actions.requestPermanentlyDeleteSelectedTournaments);
     click('close-tournament-admin-modal', actions.closeTournamentAdminModal);
     click('close-users-modal', actions.closeUsersModal);
     click('cancel-admin-edit-button', actions.cancelAdminEdit);
