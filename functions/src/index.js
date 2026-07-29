@@ -175,6 +175,21 @@ export const setTournamentDeleted = onCall(async request => {
     return { deleted };
 });
 
+export const permanentlyDeleteTournament = onCall(async request => {
+    const auth = requireSuperAdmin(request);
+    let tournamentId;
+    try { tournamentId = requireTournamentId(request.data?.tournamentId); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
+    const ref = getDatabase().ref(`tournaments/${tournamentId}`);
+    const snapshot = await ref.get();
+    if (!snapshot.exists()) throw new HttpsError('not-found', 'El torneo ya no existe.');
+    if (!snapshot.child('metadata/deletedAt').val()) {
+        throw new HttpsError('failed-precondition', 'Primero debés borrar el torneo de forma recuperable.');
+    }
+    await ref.remove();
+    await logAdminActivity(auth, 'permanentlyDeleteTournament', tournamentId);
+    return { deleted: true };
+});
+
 export const listTournamentCatalog = onCall(async request => {
     const authorization = getTournamentCatalogAuthorization(request.auth);
     if (!authorization.allowed) throw new HttpsError(authorization.code, authorization.message);

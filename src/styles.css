@@ -336,6 +336,7 @@
             align-items: center;
             gap: 8px;
         }
+        .tournament-history-deleted-actions { display: grid; gap: 6px; }
         .tournament-selection {
             display: grid;
             justify-items: center;

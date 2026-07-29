@@ -94,6 +94,7 @@ import { createAppController } from './app/app-controller.js';
     let adminUsers = [];
     let editingAdminUid = null;
     let pendingTournamentDeletion = null;
+    let pendingTournamentDeletionMode = 'logical';
     let selectedTournamentDeletionIds = new Set();
     const presenceId = (() => {
         const key = 'padel-torneo-device-id';
@@ -267,6 +268,7 @@ import { createAppController } from './app/app-controller.js';
 
     function closeDeleteTournamentModal() {
         pendingTournamentDeletion = null;
+        pendingTournamentDeletionMode = 'logical';
         setModalOpen('delete-tournament-modal', false);
     }
 
@@ -310,6 +312,7 @@ import { createAppController } from './app/app-controller.js';
             .filter(tournament => tournament && !tournament.deletedAt);
         if (!tournaments.length) return;
         pendingTournamentDeletion = tournaments;
+        pendingTournamentDeletionMode = 'logical';
         const plural = tournaments.length !== 1;
         document.getElementById('delete-tournament-modal-title').textContent = plural ? `¿Borrar ${tournaments.length} torneos?` : '¿Borrar torneo?';
         document.getElementById('delete-tournament-description').textContent = plural
@@ -317,6 +320,19 @@ import { createAppController } from './app/app-controller.js';
             : 'El torneo se ocultará del historial de admins. Como super admin podrás restaurarlo más adelante.';
         document.getElementById('confirm-delete-tournament-button').textContent = plural ? `🗑️ Borrar ${tournaments.length} torneos` : '🗑️ Borrar torneo';
         renderDeleteTournamentDetails(tournaments);
+        setModalOpen('delete-tournament-modal', true);
+    }
+
+    function requestPermanentTournamentDeletion(id) {
+        if (sessionRole !== 'superAdmin') return;
+        const tournament = sharedTournamentCatalog.find(entry => entry.id === id);
+        if (!tournament?.deletedAt) return;
+        pendingTournamentDeletion = [tournament];
+        pendingTournamentDeletionMode = 'permanent';
+        document.getElementById('delete-tournament-modal-title').textContent = '¿Eliminar definitivamente?';
+        document.getElementById('delete-tournament-description').textContent = 'Esta acción elimina el torneo y sus datos de forma permanente. No se puede deshacer ni restaurar.';
+        document.getElementById('confirm-delete-tournament-button').textContent = '⚠️ Eliminar definitivamente';
+        renderDeleteTournamentDetails([tournament]);
         setModalOpen('delete-tournament-modal', true);
     }
 
@@ -349,6 +365,15 @@ import { createAppController } from './app/app-controller.js';
     async function confirmDeleteTournament() {
         const tournaments = pendingTournamentDeletion;
         if (!tournaments?.length || sessionRole !== 'superAdmin') return;
+        if (pendingTournamentDeletionMode === 'permanent') {
+            try {
+                await adminUserApi.permanentlyDeleteTournament(tournaments[0].id);
+                closeDeleteTournamentModal();
+                await loadSharedTournamentCatalog();
+                showToast('Torneo eliminado definitivamente.');
+            } catch (error) { showToast(error.message || 'No se pudo eliminar definitivamente el torneo.'); }
+            return;
+        }
         const results = await Promise.allSettled(tournaments.map(tournament => adminUserApi.setTournamentDeleted(tournament.id, true)));
         const deletedCount = results.filter(result => result.status === 'fulfilled').length;
         const failedResult = results.find(result => result.status === 'rejected');
@@ -1615,7 +1640,7 @@ import { createAppController } from './app/app-controller.js';
     openTournamentAdminModal, closeTournamentAdminModal, setTournamentAdmin
     , closeDeleteTournamentModal, confirmDeleteTournament, requestDeleteTournament, restoreTournament,
     toggleTournamentDeletionSelection, selectAllTournamentsForDeletion,
-    clearTournamentDeletionSelection, requestDeleteSelectedTournaments
+    clearTournamentDeletionSelection, requestDeleteSelectedTournaments, requestPermanentTournamentDeletion
     });
     }
 

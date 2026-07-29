@@ -25,6 +25,9 @@ export function createAdminUserApi({ callFunction }) {
         },
         setTournamentDeleted(tournamentId, deleted) {
             return callFunction('setTournamentDeleted', { tournamentId, deleted });
+        },
+        permanentlyDeleteTournament(tournamentId) {
+            return callFunction('permanentlyDeleteTournament', { tournamentId });
         }
     };
 }

@@ -54,6 +54,8 @@ export function bindStaticUIEvents(actions) {
         if (restore) actions.restoreTournament(restore.dataset.restoreTournament);
         const remove = event.target.closest('[data-delete-tournament]');
         if (remove) actions.requestDeleteTournament(remove.dataset.deleteTournament);
+        const permanentRemove = event.target.closest('[data-permanently-delete-tournament]');
+        if (permanentRemove) actions.requestPermanentTournamentDeletion(permanentRemove.dataset.permanentlyDeleteTournament);
     });
     document.getElementById('tournament-history-list')?.addEventListener('change', event => {
         const selection = event.target.closest('[data-select-tournament]');

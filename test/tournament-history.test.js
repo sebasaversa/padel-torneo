@@ -76,6 +76,12 @@ test('permite seleccionar varios torneos activos para borrado en lote', () => {
     assert.doesNotMatch(markup, /data-select-tournament="eliminado"/);
 });
 
+test('ofrece eliminación definitiva sólo a super admin para torneos ya borrados', () => {
+    const entry = [{ id: 'eliminado', name: 'Sábado', deletedAt: 1 }];
+    assert.doesNotMatch(buildTournamentHistoryMarkup(entry), /data-permanently-delete-tournament/);
+    assert.match(buildTournamentHistoryMarkup(entry, { canDelete: true }), /data-permanently-delete-tournament="eliminado"/);
+});
+
 test('incluye todos los torneos compartidos del catálogo global', () => {
     const catalog = buildTournamentCatalog({
         old: { updatedAt: 10, state: { tournamentName: 'Anterior', tournamentDate: '2026-07-01' } },

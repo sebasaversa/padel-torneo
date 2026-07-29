@@ -13,12 +13,14 @@ test('centraliza las operaciones protegidas de administradores', async () => {
     await api.update(' admin-1 ', { displayName: 'Nuevo nombre', disabled: true });
     await api.generatePasswordResetLink('admin-1');
     await api.remove('admin-1');
+    await api.permanentlyDeleteTournament('torneo-1');
     assert.deepEqual(calls, [
         { name: 'listAdminUsers', data: undefined },
         { name: 'createAdminUser', data: { email: 'admin@ejemplo.com', displayName: 'Admin', password: 'secreto123' } },
         { name: 'updateAdminUser', data: { uid: 'admin-1', displayName: 'Nuevo nombre', disabled: true } },
         { name: 'generateAdminPasswordResetLink', data: { uid: 'admin-1' } },
-        { name: 'deleteAdminUser', data: { uid: 'admin-1' } }
+        { name: 'deleteAdminUser', data: { uid: 'admin-1' } },
+        { name: 'permanentlyDeleteTournament', data: { tournamentId: 'torneo-1' } }
     ]);
 });
 

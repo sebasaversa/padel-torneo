@@ -14,7 +14,7 @@ export function buildTournamentHistoryMarkup(entries, { formatDate, formatLastOp
             <strong>${escapeHTML(entry.name)}</strong>
             <span>${escapeHTML(date)}${entry.deletedAt ? ' · Eliminado' : ''}${lastOpened ? ` · ${escapeHTML(lastOpened)}` : ''}</span>
         </button>${entry.deletedAt
-            ? `<button class="btn btn-secondary" type="button" data-restore-tournament="${escapeHTML(entry.id)}">Restaurar</button>`
+            ? `<div class="tournament-history-deleted-actions"><button class="btn btn-secondary" type="button" data-restore-tournament="${escapeHTML(entry.id)}">Restaurar</button>${canDelete ? `<button class="btn btn-danger" type="button" data-permanently-delete-tournament="${escapeHTML(entry.id)}">Eliminar definitivamente</button>` : ''}</div>`
             : canDelete ? `<button class="btn btn-danger" type="button" data-delete-tournament="${escapeHTML(entry.id)}">🗑️ Borrar</button>` : ''}</div>`;
     }).join('');
 }
