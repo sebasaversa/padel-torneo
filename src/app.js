@@ -474,6 +474,13 @@ import { createAppController } from './app/app-controller.js';
 
     async function loadSharedTournamentCatalog() {
         if (tournamentId) return;
+        // El catálogo completo está protegido en Firebase: los invitados no
+        // deben intentar leerlo ni generar un permission_denied en consola.
+        if (!sessionUser || sessionUser.isAnonymous) {
+            sharedTournamentCatalog = [];
+            renderPreviousTournaments();
+            return;
+        }
         try {
             const database = await ensureFirebase();
             const catalog = await loadTournamentCatalog(database, tournamentHistoryStore.load());
