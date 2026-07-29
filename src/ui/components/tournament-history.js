@@ -4,11 +4,13 @@ function escapeHTML(value) {
     }[character]));
 }
 
-export function buildTournamentHistoryMarkup(entries, { formatDate, formatLastOpened, canDelete = false } = {}) {
+export function buildTournamentHistoryMarkup(entries, { formatDate, formatLastOpened, canDelete = false, selectedIds = new Set() } = {}) {
     return entries.map(entry => {
         const date = entry.date ? (formatDate?.(entry.date) || entry.date) : 'Fecha no registrada';
         const lastOpened = formatLastOpened?.(entry.updatedAt || entry.lastOpenedAt) || '';
-        return `<div class="tournament-history-row"><button class="btn btn-secondary tournament-history-item" type="button" data-open-tournament="${escapeHTML(entry.id)}">
+        const canSelect = canDelete && !entry.deletedAt;
+        const selected = canSelect && selectedIds.has(entry.id);
+        return `<div class="tournament-history-row">${canSelect ? `<label class="tournament-selection"><input type="checkbox" data-select-tournament="${escapeHTML(entry.id)}"${selected ? ' checked' : ''} aria-label="Seleccionar ${escapeHTML(entry.name)}"><span>Seleccionar</span></label>` : ''}<button class="btn btn-secondary tournament-history-item" type="button" data-open-tournament="${escapeHTML(entry.id)}">
             <strong>${escapeHTML(entry.name)}</strong>
             <span>${escapeHTML(date)}${entry.deletedAt ? ' · Eliminado' : ''}${lastOpened ? ` · ${escapeHTML(lastOpened)}` : ''}</span>
         </button>${entry.deletedAt

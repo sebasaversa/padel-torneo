@@ -124,6 +124,14 @@
         </div>
         <p class="subtitle history-page-subtitle">Todos los torneos compartidos disponibles, ordenados por última actualización.</p>
         <div class="card tournament-history-card">
+            <div class="tournament-batch-actions" id="tournament-batch-actions" hidden>
+                <span id="tournament-selection-status" aria-live="polite">0 seleccionados</span>
+                <div>
+                    <button class="btn btn-secondary" id="select-all-tournaments-button" type="button">Seleccionar todos</button>
+                    <button class="btn btn-secondary" id="clear-tournament-selection-button" type="button">Limpiar</button>
+                    <button class="btn btn-danger" id="delete-selected-tournaments-button" type="button" disabled>🗑️ Borrar seleccionados</button>
+                </div>
+            </div>
             <div class="tournament-history-list" id="tournament-history-list"></div>
         </div>
     </section>
@@ -242,12 +250,8 @@
 <div class="modal" id="delete-tournament-modal" role="dialog" aria-modal="true" aria-labelledby="delete-tournament-modal-title" hidden>
     <div class="modal-card">
         <h2 id="delete-tournament-modal-title">¿Borrar torneo?</h2>
-        <p>El torneo se ocultará del historial de admins. Como super admin podrás restaurarlo más adelante.</p>
-        <dl class="delete-tournament-details">
-            <div><dt>Torneo</dt><dd id="delete-tournament-name"></dd></div>
-            <div><dt>Creado por</dt><dd id="delete-tournament-creator"></dd></div>
-            <div><dt>Fecha de creación</dt><dd id="delete-tournament-created-at"></dd></div>
-        </dl>
+        <p id="delete-tournament-description">El torneo se ocultará del historial de admins. Como super admin podrás restaurarlo más adelante.</p>
+        <div class="delete-tournament-details" id="delete-tournament-details"></div>
         <div class="modal-actions">
             <button class="btn btn-secondary" id="cancel-delete-tournament-button" type="button">Cancelar</button>
             <button class="btn btn-danger" id="confirm-delete-tournament-button" type="button">🗑️ Borrar torneo</button>

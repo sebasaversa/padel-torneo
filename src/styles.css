@@ -142,6 +142,14 @@
             border-radius: 8px;
             background: #f4f6f8;
         }
+        .delete-tournament-details dl {
+            display: grid;
+            gap: 8px;
+            margin: 0;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
         .delete-tournament-details dt {
             color: var(--muted);
             font-size: 0.78rem;
@@ -274,6 +282,39 @@
             display: grid;
             gap: 8px;
         }
+        .tournament-batch-actions {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding-bottom: 12px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+        .tournament-batch-actions > div {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+        .tournament-batch-actions .btn { min-height: 36px; padding: 7px 10px; font-size: 0.8rem; }
+        .tournament-history-row {
+            display: grid;
+            grid-template-columns: auto minmax(0, 1fr) auto;
+            align-items: center;
+            gap: 8px;
+        }
+        .tournament-selection {
+            display: grid;
+            justify-items: center;
+            gap: 2px;
+            color: var(--muted);
+            font-size: 0.7rem;
+            cursor: pointer;
+        }
+        .tournament-selection input { width: 18px; height: 18px; accent-color: var(--primary); }
         .tournament-history-item {
             width: 100%;
             text-align: left;
@@ -470,6 +511,8 @@
             h1 { font-size: 1.25rem; }
             .btn { min-height: 44px; }
             .history-page-header { align-items: flex-start; }
+            .tournament-batch-actions { align-items: flex-start; flex-direction: column; }
+            .tournament-batch-actions > div { justify-content: flex-start; width: 100%; }
             .score-adjust { height: 44px; }
             .team-pair { flex-direction: column; }
             .team select { max-width: 100%; }

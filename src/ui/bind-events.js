@@ -9,6 +9,9 @@ export function bindStaticUIEvents(actions) {
     click('tournament-admin-button', actions.openTournamentAdminModal);
     click('cancel-delete-tournament-button', actions.closeDeleteTournamentModal);
     click('confirm-delete-tournament-button', actions.confirmDeleteTournament);
+    click('select-all-tournaments-button', actions.selectAllTournamentsForDeletion);
+    click('clear-tournament-selection-button', actions.clearTournamentDeletionSelection);
+    click('delete-selected-tournaments-button', actions.requestDeleteSelectedTournaments);
     click('close-tournament-admin-modal', actions.closeTournamentAdminModal);
     click('close-users-modal', actions.closeUsersModal);
     click('cancel-admin-edit-button', actions.cancelAdminEdit);
@@ -51,6 +54,10 @@ export function bindStaticUIEvents(actions) {
         if (restore) actions.restoreTournament(restore.dataset.restoreTournament);
         const remove = event.target.closest('[data-delete-tournament]');
         if (remove) actions.requestDeleteTournament(remove.dataset.deleteTournament);
+    });
+    document.getElementById('tournament-history-list')?.addEventListener('change', event => {
+        const selection = event.target.closest('[data-select-tournament]');
+        if (selection) actions.toggleTournamentDeletionSelection(selection.dataset.selectTournament, selection.checked);
     });
     document.getElementById('player-count')?.addEventListener('change', event => actions.setPlayerCount(parseInt(event.target.value, 10)));
     document.getElementById('round-count')?.addEventListener('change', event => actions.setRoundCount(parseInt(event.target.value, 10)));
