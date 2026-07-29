@@ -113,6 +113,11 @@
             background: white;
             box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
         }
+        #delete-tournament-modal .modal-card {
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100dvh - 32px);
+        }
         .modal-card h2 { margin-bottom: 8px; }
         .modal-card p { margin: 0 0 14px; color: var(--muted); font-size: 0.9rem; }
         .modal-card label { display: block; margin-bottom: 6px; font-size: 0.9rem; font-weight: 600; }
@@ -136,6 +141,7 @@
             display: grid;
             gap: 10px;
             margin: 16px 0 0;
+            overflow-y: auto;
         }
         .delete-tournament-details div {
             padding: 10px 12px;
@@ -156,6 +162,28 @@
             font-weight: 700;
         }
         .delete-tournament-details dd { margin: 3px 0 0; font-weight: 600; }
+        .delete-tournament-details.is-batch {
+            display: block;
+            padding: 0;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #f8fafc;
+        }
+        .delete-tournament-details.is-batch ul {
+            display: grid;
+            gap: 0;
+            margin: 0;
+            padding: 0;
+            list-style: none;
+        }
+        .delete-tournament-details.is-batch li {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+        .delete-tournament-details.is-batch li:last-child { border-bottom: 0; }
+        #delete-tournament-modal .modal-actions { flex: 0 0 auto; }
         .choice-actions {
             display: grid;
             gap: 8px;

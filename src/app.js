@@ -272,6 +272,19 @@ import { createAppController } from './app/app-controller.js';
 
     function renderDeleteTournamentDetails(tournaments) {
         const details = document.getElementById('delete-tournament-details');
+        const isBatch = tournaments.length > 1;
+        details.classList.toggle('is-batch', isBatch);
+        if (isBatch) {
+            const list = document.createElement('ul');
+            list.setAttribute('aria-label', 'Torneos seleccionados para borrar');
+            tournaments.forEach(tournament => {
+                const item = document.createElement('li');
+                item.textContent = tournament.name;
+                list.append(item);
+            });
+            details.replaceChildren(list);
+            return;
+        }
         details.replaceChildren(...tournaments.map(tournament => {
             const row = document.createElement('dl');
             const detail = (label, value) => {
