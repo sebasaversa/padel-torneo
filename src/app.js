@@ -170,10 +170,18 @@ import { createAppController } from './app/app-controller.js';
     }
 
     async function refreshSessionRole(forceRefresh = false) {
+        // El cambio de usuario puede disparar varias lecturas asíncronas de
+        // claims (por ejemplo, al salir y entrar como invitado). Sólo la
+        // respuesta correspondiente a la sesión que inició la lectura puede
+        // actualizar el rol y habilitar controles administrativos.
+        const sessionUid = sessionUser?.uid || null;
+        const sessionIsAnonymous = sessionUser?.isAnonymous === true;
         try {
             const claims = await authSession.getClaims(forceRefresh);
+            if (sessionUser?.uid !== sessionUid || (sessionUser?.isAnonymous === true) !== sessionIsAnonymous) return;
             sessionRole = claims.platformRole || null;
         } catch (error) {
+            if (sessionUser?.uid !== sessionUid || (sessionUser?.isAnonymous === true) !== sessionIsAnonymous) return;
             sessionRole = null;
         }
         renderAuthStatus();
