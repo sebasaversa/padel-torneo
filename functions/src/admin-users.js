@@ -10,6 +10,9 @@ function validatePassword(password) {
     if (typeof password !== 'string' || password.length < 8) {
         throw new Error('La contraseña debe tener al menos 8 caracteres.');
     }
+    if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+        throw new Error('La contraseña debe incluir letras y al menos un número.');
+    }
     return password;
 }
 

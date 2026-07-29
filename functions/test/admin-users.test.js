@@ -8,11 +8,12 @@ import {
     serializeUserRecord
 } from '../src/admin-users.js';
 
-test('normaliza la creación de un admin y exige una contraseña fuerte', () => {
+test('normaliza la creación de un admin y exige letras y número en la contraseña', () => {
     assert.deepEqual(normalizeAdminCreation({
         email: ' ANA@EJEMPLO.COM ', displayName: ' Ana ', password: 'secreta8'
     }), { email: 'ana@ejemplo.com', displayName: 'Ana', password: 'secreta8' });
     assert.throws(() => normalizeAdminCreation({ email: 'ana@ejemplo.com', password: 'corta' }), /8 caracteres/);
+    assert.throws(() => normalizeAdminCreation({ email: 'ana@ejemplo.com', password: 'sololetras' }), /letras.*número/i);
 });
 
 test('limita las actualizaciones de administradores a campos seguros', () => {
