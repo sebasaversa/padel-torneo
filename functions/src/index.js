@@ -179,11 +179,16 @@ export const listTournamentCatalog = onCall(async request => {
     const authorization = getTournamentCatalogAuthorization(request.auth);
     if (!authorization.allowed) throw new HttpsError(authorization.code, authorization.message);
     const snapshot = await getDatabase().ref('tournaments').get();
+    const tournaments = buildTournamentCatalogPayload(snapshot.val(), {
+        uid: authorization.auth.uid,
+        role: authorization.role
+    });
+    console.info('Tournament catalog loaded', {
+        role: authorization.role,
+        count: Object.keys(tournaments).length
+    });
     return {
-        tournaments: buildTournamentCatalogPayload(snapshot.val(), {
-            uid: authorization.auth.uid,
-            role: authorization.role
-        })
+        tournaments
     };
 });
 
