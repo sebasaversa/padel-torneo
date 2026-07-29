@@ -1109,8 +1109,12 @@ import { createAppController } from './app/app-controller.js';
             history.replaceState(null, '', `${location.pathname}?torneo=${id}`);
             saveLocal();
             renderAll();
-            await connectToTournament(id);
+            // La metadata debe existir antes de conectar: al conectarse, los
+            // torneos sin metadata se tratan como legados y perderían el
+            // ownerUid del admin que los creó.
+            await ensureFirebase();
             await tournamentMetadataStore?.initialize(id, sessionUser.uid);
+            await connectToTournament(id);
             await saveRemoteNow();
         } else if (!tournamentRef) {
             await connectToTournament(tournamentId);
