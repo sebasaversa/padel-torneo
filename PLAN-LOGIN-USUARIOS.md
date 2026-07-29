@@ -242,13 +242,13 @@ Commit: `Add role-aware tournament interface`.
 
 ### 9. Auditoría, pruebas y endurecimiento
 
-Estado: `[~]` En curso; queda configurar la política de Authentication en la consola.
+Estado: `[x]` Completada.
 
 - `[x]` Ampliar el historial de actividad con UID, nombre visible, rol y tipo de dispositivo disponible.
 - `[x]` Implementar auditoría de cambios administrativos, asignación de admins y eliminación/restauración de torneos.
 - `[x]` Probar flujos completos de super admin, admin, participante y espectador en sesiones separadas mediante pruebas de unidad, Functions y Rules Emulator.
 - `[x]` Probar revocación de permisos mientras una sesión sigue abierta (las reglas consultan owner/admins en cada escritura).
-- `[ ]` Configurar política de contraseñas y protección contra enumeración de emails en Firebase Authentication.
+- `[x]` Configurar política de contraseñas y protección contra enumeración de emails en Firebase Authentication (mínimo 8, número obligatorio, aplicación forzosa; la protección está activada por defecto en proyectos recientes).
 - `[x]` Revisar que logs, exportaciones y errores no filtren emails o datos de otros usuarios.
 
 Criterio de finalización: los cuatro roles quedan cubiertos por pruebas y las reglas no admiten escalamiento de privilegios.
