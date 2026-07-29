@@ -332,11 +332,12 @@
         .tournament-batch-actions .btn { min-height: 36px; padding: 7px 10px; font-size: 0.8rem; }
         .tournament-history-row {
             display: grid;
-            grid-template-columns: auto minmax(0, 1fr) auto;
+            grid-template-columns: 88px minmax(0, 1fr) auto;
             align-items: center;
             gap: 8px;
         }
-        .tournament-history-deleted-actions { display: grid; gap: 6px; }
+        .tournament-history-row.is-deleted { grid-template-columns: minmax(0, 1fr) auto; }
+        .tournament-history-deleted-actions { display: grid; grid-auto-flow: column; gap: 6px; }
         .tournament-selection {
             display: grid;
             justify-items: center;
@@ -544,6 +545,11 @@
             .history-page-header { align-items: flex-start; }
             .tournament-batch-actions { align-items: flex-start; flex-direction: column; }
             .tournament-batch-actions > div { justify-content: flex-start; width: 100%; }
+            .tournament-history-row { grid-template-columns: 74px minmax(0, 1fr); align-items: start; }
+            .tournament-history-row:not(.is-deleted) [data-delete-tournament] { grid-column: 2; width: 100%; }
+            .tournament-history-row.is-deleted { grid-template-columns: minmax(0, 1fr); }
+            .tournament-history-deleted-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: row; width: 100%; }
+            .tournament-history-deleted-actions .btn { width: 100%; }
             .score-adjust { height: 44px; }
             .team-pair { flex-direction: column; }
             .team select { max-width: 100%; }
