@@ -61,6 +61,12 @@ test('genera entradas seguras y navegables para el historial', () => {
     assert.match(markup, /28 de julio · Abierto recién/);
 });
 
+test('muestra el borrado sólo cuando el super admin puede administrarlo', () => {
+    const entry = [{ id: 'torneo-1', name: 'Viernes', date: '2026-07-28' }];
+    assert.doesNotMatch(buildTournamentHistoryMarkup(entry), /data-delete-tournament/);
+    assert.match(buildTournamentHistoryMarkup(entry, { canDelete: true }), /data-delete-tournament="torneo-1"/);
+});
+
 test('incluye todos los torneos compartidos del catálogo global', () => {
     const catalog = buildTournamentCatalog({
         old: { updatedAt: 10, state: { tournamentName: 'Anterior', tournamentDate: '2026-07-01' } },

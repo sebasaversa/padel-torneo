@@ -20,3 +20,11 @@ test('el catálogo limita al admin a sus torneos activos y deja todo al super ad
     assert.deepEqual(Object.keys(buildTournamentCatalogPayload(tournaments, { uid: 'admin', role: 'admin' })), ['own', 'assigned']);
     assert.deepEqual(Object.keys(buildTournamentCatalogPayload(tournaments, { uid: 'super', role: 'superAdmin' })), ['own', 'assigned', 'deleted', 'foreign']);
 });
+
+test('incluye la información del creador para confirmar borrados', () => {
+    const payload = buildTournamentCatalogPayload({
+        torneo: { metadata: { ownerUid: 'owner', createdAt: 42 } }
+    }, { uid: 'super', role: 'superAdmin', profiles: { owner: { displayName: 'Ana Pérez' } } });
+    assert.equal(payload.torneo.metadata.creatorName, 'Ana Pérez');
+    assert.equal(payload.torneo.metadata.createdAt, 42);
+});

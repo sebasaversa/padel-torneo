@@ -178,10 +178,15 @@ export const setTournamentDeleted = onCall(async request => {
 export const listTournamentCatalog = onCall(async request => {
     const authorization = getTournamentCatalogAuthorization(request.auth);
     if (!authorization.allowed) throw new HttpsError(authorization.code, authorization.message);
-    const snapshot = await getDatabase().ref('tournaments').get();
+    const database = getDatabase();
+    const [snapshot, profilesSnapshot] = await Promise.all([
+        database.ref('tournaments').get(),
+        database.ref('userProfiles').get()
+    ]);
     const tournaments = buildTournamentCatalogPayload(snapshot.val(), {
         uid: authorization.auth.uid,
-        role: authorization.role
+        role: authorization.role,
+        profiles: profilesSnapshot.val() || {}
     });
     console.info('Tournament catalog loaded', {
         role: authorization.role,

@@ -15,7 +15,9 @@ export function buildTournamentCatalog(tournaments, localHistory = []) {
                 lastOpenedAt: localEntry?.lastOpenedAt || 0,
                 ownerUid: tournament?.metadata?.ownerUid || null,
                 admins: tournament?.metadata?.admins || {},
-                deletedAt: tournament?.metadata?.deletedAt || null
+                deletedAt: tournament?.metadata?.deletedAt || null,
+                creatorName: tournament?.metadata?.creatorName || '',
+                createdAt: tournament?.metadata?.createdAt || null
             };
         })
         .filter(Boolean)

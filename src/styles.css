@@ -132,6 +132,22 @@
             margin-top: 16px;
         }
         .modal-actions .btn { min-height: 44px; }
+        .delete-tournament-details {
+            display: grid;
+            gap: 10px;
+            margin: 16px 0 0;
+        }
+        .delete-tournament-details div {
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: #f4f6f8;
+        }
+        .delete-tournament-details dt {
+            color: var(--muted);
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+        .delete-tournament-details dd { margin: 3px 0 0; font-weight: 600; }
         .choice-actions {
             display: grid;
             gap: 8px;

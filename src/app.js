@@ -93,6 +93,7 @@ import { createAppController } from './app/app-controller.js';
     let bootstrapAttemptPromise = null;
     let adminUsers = [];
     let editingAdminUid = null;
+    let pendingTournamentDeletion = null;
     const presenceId = (() => {
         const key = 'padel-torneo-device-id';
         const generatedId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
@@ -149,13 +150,11 @@ import { createAppController } from './app/app-controller.js';
         const status = document.getElementById('auth-status');
         const usersButton = document.getElementById('users-button');
         const tournamentAdminButton = document.getElementById('tournament-admin-button');
-        const deleteTournamentButton = document.getElementById('delete-tournament-button');
         const isRegisteredUser = sessionUser && !sessionUser.isAnonymous;
         signInButton.hidden = Boolean(isRegisteredUser);
         signOutButton.hidden = !isRegisteredUser;
         usersButton.hidden = sessionRole !== 'superAdmin';
         tournamentAdminButton.hidden = sessionRole !== 'superAdmin' || !tournamentId;
-        deleteTournamentButton.hidden = sessionRole !== 'superAdmin' || !tournamentId;
         const roleLabel = sessionRole === 'superAdmin' ? ' · Super admin' : sessionRole === 'admin' ? ' · Admin' : '';
         status.textContent = isRegisteredUser
             ? `Sesión iniciada: ${sessionUser.displayName}${roleLabel}`
@@ -260,12 +259,35 @@ import { createAppController } from './app/app-controller.js';
         catch (error) { showToast(error.message || 'No se pudo actualizar el torneo.'); }
     }
 
-    async function deleteTournament() {
-        if (!tournamentId || !confirm('¿Borrar este torneo? Podrás restaurarlo como super admin.')) return;
+    function formatCreatedAt(timestamp) {
+        if (!timestamp) return 'Fecha no registrada';
+        return new Intl.DateTimeFormat('es-AR', { dateStyle: 'long', timeStyle: 'short' }).format(new Date(timestamp));
+    }
+
+    function closeDeleteTournamentModal() {
+        pendingTournamentDeletion = null;
+        setModalOpen('delete-tournament-modal', false);
+    }
+
+    function requestDeleteTournament(id) {
+        if (sessionRole !== 'superAdmin') return;
+        const tournament = sharedTournamentCatalog.find(entry => entry.id === id);
+        if (!tournament || tournament.deletedAt) return;
+        pendingTournamentDeletion = tournament;
+        document.getElementById('delete-tournament-name').textContent = tournament.name;
+        document.getElementById('delete-tournament-creator').textContent = tournament.creatorName || 'No registrado';
+        document.getElementById('delete-tournament-created-at').textContent = formatCreatedAt(tournament.createdAt);
+        setModalOpen('delete-tournament-modal', true);
+    }
+
+    async function confirmDeleteTournament() {
+        const tournament = pendingTournamentDeletion;
+        if (!tournament || sessionRole !== 'superAdmin') return;
         try {
-            await adminUserApi.setTournamentDeleted(tournamentId, true);
+            await adminUserApi.setTournamentDeleted(tournament.id, true);
+            closeDeleteTournamentModal();
+            await loadSharedTournamentCatalog();
             showToast('Torneo borrado lógicamente.');
-            showMainPage();
         } catch (error) { showToast(error.message || 'No se pudo borrar el torneo.'); }
     }
 
@@ -476,7 +498,8 @@ import { createAppController } from './app/app-controller.js';
         if (!container) return;
         renderTournamentHistory(container, tournamentId ? [] : sharedTournamentCatalog, {
             formatDate: formatTournamentDate,
-            formatLastOpened: formatTournamentUpdatedAt
+            formatLastOpened: formatTournamentUpdatedAt,
+            canDelete: sessionRole === 'superAdmin'
         });
     }
 
@@ -1511,7 +1534,7 @@ import { createAppController } from './app/app-controller.js';
     openUsersModal, closeUsersModal, createAdminUser, deleteAdminUser,
     startAdminEdit, cancelAdminEdit, toggleAdminUser, generateAdminPasswordResetLink,
     openTournamentAdminModal, closeTournamentAdminModal, setTournamentAdmin
-    , deleteTournament, restoreTournament
+    , closeDeleteTournamentModal, confirmDeleteTournament, requestDeleteTournament, restoreTournament
     });
     }
 

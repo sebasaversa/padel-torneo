@@ -7,7 +7,8 @@ export function bindStaticUIEvents(actions) {
     click('sign-out-button', actions.signOut);
     click('users-button', actions.openUsersModal);
     click('tournament-admin-button', actions.openTournamentAdminModal);
-    click('delete-tournament-button', actions.deleteTournament);
+    click('cancel-delete-tournament-button', actions.closeDeleteTournamentModal);
+    click('confirm-delete-tournament-button', actions.confirmDeleteTournament);
     click('close-tournament-admin-modal', actions.closeTournamentAdminModal);
     click('close-users-modal', actions.closeUsersModal);
     click('cancel-admin-edit-button', actions.cancelAdminEdit);
@@ -48,6 +49,8 @@ export function bindStaticUIEvents(actions) {
         if (button) actions.openPreviousTournament(button.dataset.openTournament);
         const restore = event.target.closest('[data-restore-tournament]');
         if (restore) actions.restoreTournament(restore.dataset.restoreTournament);
+        const remove = event.target.closest('[data-delete-tournament]');
+        if (remove) actions.requestDeleteTournament(remove.dataset.deleteTournament);
     });
     document.getElementById('player-count')?.addEventListener('change', event => actions.setPlayerCount(parseInt(event.target.value, 10)));
     document.getElementById('round-count')?.addEventListener('change', event => actions.setRoundCount(parseInt(event.target.value, 10)));

@@ -28,7 +28,6 @@
             <button class="btn btn-secondary" id="sign-out-button" hidden>↪ Cerrar sesión</button>
             <button class="btn btn-secondary" id="users-button" hidden>👥 Usuarios</button>
             <button class="btn btn-secondary" id="tournament-admin-button" hidden>⚙️ Administrar torneo</button>
-            <button class="btn btn-danger" id="delete-tournament-button" hidden>🗑️ Borrar torneo</button>
             <button class="btn btn-primary" id="share-button">🔗 Compartir link</button>
             <button class="btn btn-secondary" id="undo-button" disabled>↩ Deshacer</button>
             <button class="btn btn-secondary" id="summary-button">🏁 Resumen</button>
@@ -240,6 +239,21 @@
     </div>
 </div>
 <div class="modal" id="tournament-admin-modal" role="dialog" aria-modal="true" hidden><div class="modal-card"><h2>Administrar torneo</h2><p>Asigná administradores para este torneo.</p><div id="tournament-admin-list" class="admin-users-list"></div><div class="modal-actions"><button class="btn btn-secondary" id="close-tournament-admin-modal" type="button">Cerrar</button></div></div></div>
+<div class="modal" id="delete-tournament-modal" role="dialog" aria-modal="true" aria-labelledby="delete-tournament-modal-title" hidden>
+    <div class="modal-card">
+        <h2 id="delete-tournament-modal-title">¿Borrar torneo?</h2>
+        <p>El torneo se ocultará del historial de admins. Como super admin podrás restaurarlo más adelante.</p>
+        <dl class="delete-tournament-details">
+            <div><dt>Torneo</dt><dd id="delete-tournament-name"></dd></div>
+            <div><dt>Creado por</dt><dd id="delete-tournament-creator"></dd></div>
+            <div><dt>Fecha de creación</dt><dd id="delete-tournament-created-at"></dd></div>
+        </dl>
+        <div class="modal-actions">
+            <button class="btn btn-secondary" id="cancel-delete-tournament-button" type="button">Cancelar</button>
+            <button class="btn btn-danger" id="confirm-delete-tournament-button" type="button">🗑️ Borrar torneo</button>
+        </div>
+    </div>
+</div>
 <input type="file" id="file-input" accept=".json" style="display:none">
 
 <script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
