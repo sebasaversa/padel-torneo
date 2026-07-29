@@ -138,6 +138,8 @@
         }
         .modal-actions .btn { min-height: 44px; }
         .delete-tournament-details {
+            flex: 1 1 auto;
+            min-height: 0;
             display: grid;
             gap: 10px;
             margin: 16px 0 0;
