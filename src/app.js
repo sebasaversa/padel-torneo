@@ -1600,7 +1600,9 @@ import { createAppController } from './app/app-controller.js';
     openUsersModal, closeUsersModal, createAdminUser, deleteAdminUser,
     startAdminEdit, cancelAdminEdit, toggleAdminUser, generateAdminPasswordResetLink,
     openTournamentAdminModal, closeTournamentAdminModal, setTournamentAdmin
-    , closeDeleteTournamentModal, confirmDeleteTournament, requestDeleteTournament, restoreTournament
+    , closeDeleteTournamentModal, confirmDeleteTournament, requestDeleteTournament, restoreTournament,
+    toggleTournamentDeletionSelection, selectAllTournamentsForDeletion,
+    clearTournamentDeletionSelection, requestDeleteSelectedTournaments
     });
     }
 
