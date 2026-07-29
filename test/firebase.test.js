@@ -53,6 +53,19 @@ test('llama Functions con el token autenticado sin depender de scripts globales'
     assert.equal(request.options.body, '{"data":null}');
 });
 
+test('lee el campo result del protocolo callable de Firebase', async () => {
+    const auth = { currentUser: { isAnonymous: false, getIdToken: async () => 'token-seguro' } };
+    const client = createFirebaseClient({
+        firebase: {
+            apps: [{}], auth: () => auth,
+            database: Object.assign(() => ({}), { ServerValue: { TIMESTAMP: 'timestamp' } })
+        },
+        config: { projectId: 'padel-test' },
+        fetchFn: async () => ({ ok: true, json: async () => ({ result: { tournaments: { torneo: {} } } }) })
+    });
+    assert.deepEqual(await client.callFunction('listTournamentCatalog'), { tournaments: { torneo: {} } });
+});
+
 test('mantiene una sesión existente en lugar de reemplazarla por una anónima', async () => {
     let signedInAnonymously = 0;
     const signedInUser = { uid: 'admin-1' };

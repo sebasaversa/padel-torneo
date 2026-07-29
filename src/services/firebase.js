@@ -56,7 +56,10 @@ export function createFirebaseClient({ firebase, config, fetchFn = globalThis.fe
             });
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) throw new Error(payload.error?.message || 'No se pudo completar la operación.');
-            return payload.data;
+            // Las callable Functions de Firebase usan el campo `result` en
+            // su protocolo HTTP. Conservamos `data` para compatibilidad con
+            // respuestas anteriores y pruebas ya existentes.
+            return payload.result ?? payload.data;
         },
         serverTimestamp() {
             return firebase.database.ServerValue.TIMESTAMP;
