@@ -1,21 +1,25 @@
 import { createStateStore, createTournamentState } from './state/store.js';
-import { createDefaultState, normalizeState } from './state/model.js';
+import {
+    createDefaultState,
+    createDefaultConfiguration,
+    hasAnyScore,
+    normalizeState,
+    withGeneratedFixture
+} from './state/model.js';
 import { createLocalStorageStore } from './services/local-storage.js';
 import { createTournamentHistoryStore } from './services/tournament-history.js';
 import { filterTournamentCatalog, loadTournamentCatalog } from './services/tournament-catalog.js';
 import {
-    createAutomaticRound as createFixtureRound,
     generateSchedule as buildSchedule,
     getCourts,
-    getNumRounds,
     getPlayingCount,
-    getRestCount
+    getRestCount,
+    recommendNumRounds
 } from './features/fixture/generator.js';
-import { hasResults, resizeRounds } from './features/fixture/rounds.js';
+import { createFixtureGeneratorWorker } from './features/fixture/worker-client.js';
+import { scheduleFingerprint } from './features/fixture/canonical.js';
 import {
-    applySingleRoundPlayerChange,
-    hasRecordedScoresFromRound,
-    swapPlayersInRound
+    applySingleRoundPlayerChange
 } from './features/fixture/player-swaps.js';
 import { adjustScore as getAdjustedScore, normalizeScore } from './features/scoring/scores.js';
 import { getScoreWarning, isMatchDone, isRoundDone } from './features/scoring/validation.js';
@@ -24,9 +28,7 @@ import { buildTournamentSummaryText } from './features/scoring/summary.js';
 import { createFirebaseClient } from './services/firebase.js';
 import { createAuthSession } from './services/auth-session.js';
 import { createAdminUserApi } from './services/admin-user-api.js';
-import { createTournamentMetadataStore } from './services/tournament-metadata-store.js';
 import { createTournamentSync } from './services/tournament-sync.js';
-import { createTournamentIdentity } from './services/identity.js';
 import { formatPresenceRole, summarizePresence } from './services/presence.js';
 import { createActivityLog } from './services/activity.js';
 import {
@@ -47,11 +49,11 @@ import { createAppController } from './app/app-controller.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
-    const MAX_COURTS = 2;
+    const UI_MAX_COURTS = 2;
     const MIN_GAMES_PER_SET = 1;
     const MAX_GAMES_PER_SET = 20;
     const MIN_ROUNDS = 1;
-    const MAX_ROUNDS = 50;
+    const MAX_ROUNDS = 100;
 
     const initialState = createDefaultState();
     const tournamentState = createTournamentState(initialState);
@@ -73,8 +75,8 @@ import { createAppController } from './app/app-controller.js';
     const authSession = createAuthSession({ firebase, auth: firebaseClient.getAuth() });
     const adminUserApi = createAdminUserApi({ callFunction: (...args) => firebaseClient.callFunction(...args) });
     let tournamentId = new URLSearchParams(location.search).get('torneo');
+    let invitationToken = new URLSearchParams(location.search).get('invitacion') || '';
     let realtimeDb = null;
-    let tournamentMetadataStore = null;
     let tournamentRef = null;
     let tournamentSync = null;
     let tournamentIdentity = null;
@@ -89,6 +91,9 @@ import { createAppController } from './app/app-controller.js';
     let sharedTournamentCatalog = [];
     let sessionUser = authSession.currentUser();
     let sessionRole = null;
+    let tournamentAccessRole = null;
+    let generatingFixture = false;
+    let fixtureGenerationRevision = 0;
     let bootstrapAttemptUid = null;
     let bootstrapAttemptPromise = null;
     let adminUsers = [];
@@ -110,21 +115,99 @@ import { createAppController } from './app/app-controller.js';
             return generatedId();
         }
     })();
+    const fixtureGeneratorWorker = createFixtureGeneratorWorker({
+        onProgress(progress) {
+            if (generatingFixture) setSyncStatus(`Generando fixture… ${Math.round(progress * 100)}%`);
+        }
+    });
 
     function defaultPlayers(n) {
-        return createDefaultState({ numPlayers: n }).players;
+        return Array.from({ length: n }, (_, index) => `Jugador ${index + 1}`);
     }
 
-    function createAutomaticRound(roundIndex) {
-        return createFixtureRound(tournamentState.value.numPlayers, roundIndex, tournamentState.value.numCourts);
-    }
-
-    function generateSchedule(roundCount = getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts)) {
-        tournamentState.value.schedule = buildSchedule(tournamentState.value.numPlayers, roundCount, {
-            minRounds: MIN_ROUNDS,
-            maxRounds: MAX_ROUNDS,
-            maxCourts: tournamentState.value.numCourts
+    function currentConfiguration() {
+        return createDefaultConfiguration({
+            numPlayers: tournamentState.value.numPlayers,
+            numCourts: tournamentState.value.numCourts,
+            pairingMode: tournamentState.value.pairingMode,
+            fixedTeams: tournamentState.value.fixedTeams
         });
+    }
+
+    function getNumRounds() {
+        return recommendNumRounds(currentConfiguration());
+    }
+
+    function generateSchedule(roundCount = getNumRounds(), fixtureVariant = tournamentState.value.fixtureVariant || 0) {
+        const generated = buildSchedule({
+            configuration: currentConfiguration(),
+            numRounds: Math.max(MIN_ROUNDS, Math.min(MAX_ROUNDS, roundCount)),
+            fixtureVariant,
+            generationContext: { type: 'fresh' }
+        });
+        const next = withGeneratedFixture(tournamentState.snapshot(), generated);
+        tournamentState.replace(next);
+        return generated;
+    }
+
+    async function generateScheduleWithoutBlocking(
+        roundCount = getNumRounds(),
+        fixtureVariant = tournamentState.value.fixtureVariant || 0
+    ) {
+        const requestRevision = ++fixtureGenerationRevision;
+        generatingFixture = true;
+        renderAuthStatus();
+        setSyncStatus('Generando fixture…');
+        try {
+            const generated = await fixtureGeneratorWorker.generate({
+                configuration: currentConfiguration(),
+                numRounds: roundCount,
+                fixtureVariant,
+                generationContext: { type: 'fresh' }
+            });
+            if (requestRevision !== fixtureGenerationRevision) {
+                throw Object.assign(new Error('La respuesta del Worker quedó obsoleta.'), {
+                    code: 'GENERATION_STALE'
+                });
+            }
+            tournamentState.replace(withGeneratedFixture(tournamentState.snapshot(), generated));
+            return generated;
+        } finally {
+            if (requestRevision === fixtureGenerationRevision) {
+                generatingFixture = false;
+                renderAuthStatus();
+                if (!tournamentId) setSyncStatus('Guardado en este dispositivo');
+            }
+        }
+    }
+
+    async function extendScheduleWithoutBlocking(targetCount) {
+        const requestRevision = ++fixtureGenerationRevision;
+        generatingFixture = true;
+        renderAuthStatus();
+        setSyncStatus('Generando fixture…');
+        try {
+            const extended = await fixtureGeneratorWorker.extend({
+                immutableHistory: tournamentState.value.schedule,
+                targetCount,
+                configuration: currentConfiguration(),
+                fixtureVariant: tournamentState.value.fixtureVariant,
+                sourceRevision: tournamentState.value.revision,
+                sourceScheduleRevision: tournamentState.value.scheduleRevision
+            });
+            if (requestRevision !== fixtureGenerationRevision) {
+                throw Object.assign(new Error('La respuesta del Worker quedó obsoleta.'), {
+                    code: 'GENERATION_STALE'
+                });
+            }
+            return extended;
+        } finally {
+            if (requestRevision === fixtureGenerationRevision) {
+                generatingFixture = false;
+                renderAuthStatus();
+                if (!tournamentId) setSyncStatus('Guardado en este dispositivo');
+            }
+        }
     }
 
     function getTodayISODate() {
@@ -157,17 +240,48 @@ import { createAppController } from './app/app-controller.js';
         signOutButton.hidden = !isRegisteredUser;
         usersButton.hidden = sessionRole !== 'superAdmin';
         tournamentAdminButton.hidden = sessionRole !== 'superAdmin' || !tournamentId;
-        const roleLabel = sessionRole === 'superAdmin' ? ' · Super admin' : sessionRole === 'admin' ? ' · Admin' : '';
+        const effectiveAdmin = canManageCurrentTournament();
+        const roleLabel = sessionRole === 'superAdmin'
+            ? ' · Super admin'
+            : effectiveAdmin ? ' · Admin del torneo' : '';
         status.textContent = isRegisteredUser
             ? `Sesión iniciada: ${sessionUser.displayName}${roleLabel}`
             : 'Modo invitado: podés entrar a un torneo compartido desde su link.';
-        const canConfigure = !tournamentId || ['admin', 'superAdmin'].includes(sessionRole);
-        ['player-count', 'round-count', 'court-count', 'games-per-set', 'player-count-decrease', 'player-count-increase',
-            'round-count-decrease', 'round-count-increase', 'court-count-decrease', 'court-count-increase', 'games-decrease', 'games-increase', 'reset-schedule-button', 'reset-all-button']
+        const canManageTournament = canManageCurrentTournament();
+        ['round-count', 'round-count-decrease', 'round-count-increase', 'reset-schedule-button']
             .forEach(id => {
                 const control = document.getElementById(id);
-                if (control) control.disabled = !canConfigure;
+                if (control) control.disabled = !canManageTournament || generatingFixture;
             });
+        const gamesLocked = hasAnyScore(tournamentState.value.schedule);
+        ['games-per-set', 'games-decrease', 'games-increase'].forEach(id => {
+            const control = document.getElementById(id);
+            if (control) control.disabled = !canManageTournament || gamesLocked || generatingFixture;
+        });
+        const resetAllButton = document.getElementById('reset-all-button');
+        if (resetAllButton) resetAllButton.disabled = Boolean(tournamentId) || generatingFixture;
+        const undoButton = document.getElementById('undo-button');
+        if (undoButton) undoButton.disabled = Boolean(tournamentId) || generatingFixture || !stateStore.hasUndo();
+        const regenerateButton = document.getElementById('reset-schedule-button');
+        if (regenerateButton && tournamentState.value.diagnostic) {
+            regenerateButton.disabled = !canManageTournament || generatingFixture
+                || tournamentState.value.fixtureVariant >= tournamentState.value.diagnostic.variantCount - 1;
+        }
+        ['player-count', 'court-count', 'player-count-decrease', 'player-count-increase',
+            'court-count-decrease', 'court-count-increase']
+            .forEach(id => {
+                const control = document.getElementById(id);
+                if (control) control.disabled = Boolean(tournamentId) || generatingFixture;
+            });
+        document.querySelectorAll('input[name="pairing-mode"]').forEach(input => {
+            input.disabled = Boolean(tournamentId) || generatingFixture
+                || (input.value === 'fixed' && tournamentState.value.numPlayers % 2 !== 0);
+        });
+    }
+
+    function canManageCurrentTournament() {
+        if (!tournamentId) return true;
+        return sessionRole === 'superAdmin' || tournamentAccessRole === 'admin';
     }
 
     async function refreshSessionRole(forceRefresh = false) {
@@ -191,15 +305,7 @@ import { createAppController } from './app/app-controller.js';
     }
 
     async function migrateLegacyTournamentIfNeeded() {
-        if (sessionRole !== 'superAdmin' || !sessionUser || !tournamentId || !tournamentMetadataStore) return;
-        try {
-            const metadata = await tournamentMetadataStore.get(tournamentId);
-            if (!metadata.ownerUid && !Object.keys(metadata.admins).length) {
-                await tournamentMetadataStore.initializeLegacy(tournamentId, sessionUser.uid);
-            }
-        } catch (error) {
-            console.warn('No se pudo preparar la metadata del torneo anterior.', error);
-        }
+        // Corte limpio: los torneos sin schemaVersion 2 se rechazan y no se migran.
     }
 
     async function bootstrapSuperAdmin() {
@@ -242,7 +348,10 @@ import { createAppController } from './app/app-controller.js';
         list.textContent = 'Cargando administradores…';
         setModalOpen('tournament-admin-modal', true);
         try {
-            const [users, metadata] = await Promise.all([adminUserApi.list(), tournamentMetadataStore.get(tournamentId)]);
+            const [users, metadata] = await Promise.all([
+                adminUserApi.list(),
+                firebaseClient.callFunction('getTournamentAdminViewV2', { tournamentId })
+            ]);
             list.replaceChildren();
             users.forEach(user => {
                 const label = document.createElement('label');
@@ -706,7 +815,7 @@ import { createAppController } from './app/app-controller.js';
         const rest = getRestCount(tournamentState.value.numPlayers, tournamentState.value.numCourts);
         const rounds = tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts);
         const plannedRounds = getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts);
-        const availableCourts = Math.min(MAX_COURTS, Math.floor(tournamentState.value.numPlayers / 4));
+        const availableCourts = Math.min(UI_MAX_COURTS, Math.floor(tournamentState.value.numPlayers / 4));
         renderTournamentToolbar({ tournamentId, tournamentName: tournamentState.value.tournamentName, tournamentDate: tournamentState.value.tournamentDate, formattedDate: formatTournamentDate(tournamentState.value.tournamentDate), numPlayers: tournamentState.value.numPlayers, gamesPerSet: tournamentState.value.gamesPerSet, scheduleLength: rounds, courts, rest, plannedRounds, availableCourts });
     }
 
@@ -717,7 +826,143 @@ import { createAppController } from './app/app-controller.js';
             tournamentState.value.players[i] = old[i];
         }
         tournamentState.value.numPlayers = newCount;
+        if (tournamentState.value.pairingMode === 'fixed') {
+            tournamentState.value.fixedTeams = newCount % 2 === 0
+                ? createConsecutiveFixedTeams(newCount)
+                : [];
+            if (newCount % 2 !== 0) tournamentState.value.pairingMode = 'rotating';
+        }
         document.getElementById('player-count').value = newCount;
+    }
+
+    function createConsecutiveFixedTeams(numPlayers) {
+        return Array.from({ length: numPlayers / 2 }, (_, teamIndex) => {
+            const playerIds = [teamIndex * 2, teamIndex * 2 + 1];
+            return { id: `team-${playerIds[0]}-${playerIds[1]}`, playerIds };
+        });
+    }
+
+    async function setPairingMode(mode) {
+        if (tournamentId || generatingFixture || !['rotating', 'fixed'].includes(mode)) return;
+        if (mode === 'fixed' && tournamentState.value.numPlayers % 2 !== 0) {
+            showToast('Las parejas fijas requieren una cantidad par de jugadores.');
+            renderFixtureConfiguration();
+            return;
+        }
+        if (mode === tournamentState.value.pairingMode) return;
+        const previousState = tournamentState.snapshot();
+        rememberStateForUndo();
+        tournamentState.value.pairingMode = mode;
+        tournamentState.value.fixedTeams = mode === 'fixed'
+            ? createConsecutiveFixedTeams(tournamentState.value.numPlayers)
+            : [];
+        try {
+            await generateScheduleWithoutBlocking(getNumRounds(), 0);
+        } catch (error) {
+            tournamentState.replace(previousState);
+            renderAll();
+            showToast('No se pudo generar el fixture.');
+            return;
+        }
+        saveLocal();
+        renderAll();
+    }
+
+    async function setFixedTeamPlayer(teamIndex, memberIndex, playerId) {
+        if (tournamentId || generatingFixture || tournamentState.value.pairingMode !== 'fixed') return;
+        const previousState = tournamentState.snapshot();
+        const teams = structuredClone(tournamentState.value.fixedTeams);
+        const target = teams[teamIndex]?.playerIds;
+        if (!target || ![0, 1].includes(memberIndex)
+            || !Number.isInteger(playerId) || playerId < 0 || playerId >= tournamentState.value.numPlayers) return;
+        const previous = target[memberIndex];
+        if (previous === playerId) return;
+        for (const team of teams) {
+            const existingIndex = team.playerIds.indexOf(playerId);
+            if (existingIndex !== -1) team.playerIds[existingIndex] = previous;
+        }
+        target[memberIndex] = playerId;
+        tournamentState.value.fixedTeams = teams;
+        try {
+            await generateScheduleWithoutBlocking(tournamentState.value.schedule.length || getNumRounds(), 0);
+        } catch (error) {
+            tournamentState.replace(previousState);
+            renderAll();
+            showToast('No se pudo generar el fixture.');
+            return;
+        }
+        saveLocal();
+        renderAll();
+    }
+
+    function renderFixtureConfiguration() {
+        const fixedRadio = document.querySelector('input[name="pairing-mode"][value="fixed"]');
+        const rotatingRadio = document.querySelector('input[name="pairing-mode"][value="rotating"]');
+        const odd = tournamentState.value.numPlayers % 2 !== 0;
+        fixedRadio.checked = tournamentState.value.pairingMode === 'fixed';
+        rotatingRadio.checked = tournamentState.value.pairingMode === 'rotating';
+        fixedRadio.disabled = Boolean(tournamentId) || generatingFixture || odd;
+        rotatingRadio.disabled = Boolean(tournamentId) || generatingFixture;
+        document.getElementById('pairing-mode-hint').textContent = odd
+            ? 'Las parejas fijas requieren una cantidad par de jugadores.'
+            : tournamentId ? 'El tipo de parejas queda bloqueado al crear el torneo.' : '';
+        const editor = document.getElementById('fixed-teams-editor');
+        editor.hidden = tournamentState.value.pairingMode !== 'fixed' || Boolean(tournamentId);
+        const container = document.getElementById('fixed-teams-container');
+        container.replaceChildren();
+        if (!editor.hidden) {
+            tournamentState.value.fixedTeams.forEach((team, teamIndex) => {
+                const row = document.createElement('div');
+                row.className = 'fixed-team-row';
+                const label = document.createElement('strong');
+                label.textContent = `Equipo ${teamIndex + 1}`;
+                row.append(label);
+                team.playerIds.forEach((selectedId, memberIndex) => {
+                    if (memberIndex === 1) {
+                        const plus = document.createElement('span');
+                        plus.textContent = '+';
+                        row.append(plus);
+                    }
+                    const select = document.createElement('select');
+                    select.disabled = generatingFixture;
+                    select.dataset.fixedTeamPlayer = '';
+                    select.dataset.teamIndex = String(teamIndex);
+                    select.dataset.memberIndex = String(memberIndex);
+                    tournamentState.value.players.forEach((name, playerId) => {
+                        const option = document.createElement('option');
+                        option.value = String(playerId);
+                        option.textContent = name;
+                        option.selected = playerId === selectedId;
+                        select.append(option);
+                    });
+                    row.append(select);
+                });
+                container.append(row);
+            });
+        }
+        const diagnostic = tournamentState.value.diagnostic;
+        const diagnosticElement = document.getElementById('fixture-diagnostic');
+        if (!diagnostic) {
+            diagnosticElement.textContent = '';
+            return;
+        }
+        const classLabels = {
+            exact: 'Diseño exacto verificado',
+            'optimal-known': 'Óptimo certificado para repeticiones',
+            optimized: 'Fixture optimizado'
+        };
+        const coverage = diagnostic.pairingMode === 'fixed'
+            ? `${diagnostic.uniqueTeamMatchups} de ${diagnostic.possibleTeamMatchups} cruces entre equipos`
+            : `${diagnostic.uniquePartners} de ${diagnostic.possiblePartners} parejas`;
+        const cycleLabels = { partial: 'ciclo parcial', complete: 'ciclo completo', extended: 'ciclo extendido' };
+        const minimumRounds = diagnostic.pairingMode === 'fixed'
+            ? diagnostic.minimumRoundsForTeamCoverage
+            : diagnostic.minimumRoundsForPairCapacity;
+        diagnosticElement.textContent = `${classLabels[diagnostic.solutionClass]} · ${coverage}`
+            + (cycleLabels[diagnostic.cycleStatus] ? ` · ${cycleLabels[diagnostic.cycleStatus]}` : '')
+            + (diagnostic.coverageStatus === 'impossible-by-capacity'
+                ? ` · cobertura total posible desde ${minimumRounds} rondas`
+                : '');
     }
 
     function changePlayerCount(delta) {
@@ -732,10 +977,19 @@ import { createAppController } from './app/app-controller.js';
         setCourtCount(tournamentState.value.numCourts + delta);
     }
 
-    function setCourtCount(newCount) {
-        if (Number.isNaN(newCount)) return;
-        const maxAvailableCourts = Math.min(MAX_COURTS, Math.floor(tournamentState.value.numPlayers / 4));
-        newCount = Math.max(1, Math.min(maxAvailableCourts, newCount));
+    async function setCourtCount(newCount) {
+        if (generatingFixture) return;
+        if (tournamentId) {
+            document.getElementById('court-count').value = tournamentState.value.numCourts;
+            showToast('La cantidad de canchas queda bloqueada al crear el torneo.');
+            return;
+        }
+        const maxAvailableCourts = Math.min(UI_MAX_COURTS, Math.floor(tournamentState.value.numPlayers / 4));
+        if (!Number.isInteger(newCount) || newCount < 1 || newCount > maxAvailableCourts) {
+            document.getElementById('court-count').value = tournamentState.value.numCourts;
+            showToast(`Elegí entre 1 y ${maxAvailableCourts} canchas.`);
+            return;
+        }
         if (newCount === tournamentState.value.numCourts) {
             document.getElementById('court-count').value = tournamentState.value.numCourts;
             return;
@@ -747,10 +1001,18 @@ import { createAppController } from './app/app-controller.js';
             return;
         }
 
+        const previousState = tournamentState.snapshot();
         rememberStateForUndo();
         const currentRoundCount = tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts);
         tournamentState.value.numCourts = newCount;
-        generateSchedule(currentRoundCount);
+        try {
+            await generateScheduleWithoutBlocking(currentRoundCount);
+        } catch (error) {
+            tournamentState.replace(previousState);
+            renderAll();
+            showToast('No se pudo generar el fixture.');
+            return;
+        }
         tournamentState.value.collapsedRounds = {};
         saveLocal();
         logActivity(`cambió la cantidad de canchas a ${newCount}`);
@@ -767,9 +1029,23 @@ import { createAppController } from './app/app-controller.js';
             document.getElementById('games-per-set').value = tournamentState.value.gamesPerSet;
             return;
         }
-        newTarget = Math.max(MIN_GAMES_PER_SET, Math.min(MAX_GAMES_PER_SET, newTarget));
+        if (!Number.isInteger(newTarget) || newTarget < MIN_GAMES_PER_SET || newTarget > MAX_GAMES_PER_SET) {
+            document.getElementById('games-per-set').value = tournamentState.value.gamesPerSet;
+            showToast(`Elegí entre ${MIN_GAMES_PER_SET} y ${MAX_GAMES_PER_SET} games.`);
+            return;
+        }
+        if (hasAnyScore(tournamentState.value.schedule)) {
+            document.getElementById('games-per-set').value = tournamentState.value.gamesPerSet;
+            showToast('No se pueden cambiar los games porque ya hay puntajes cargados.');
+            return;
+        }
         if (newTarget === tournamentState.value.gamesPerSet) {
             document.getElementById('games-per-set').value = tournamentState.value.gamesPerSet;
+            return;
+        }
+        if (tournamentId) {
+            tournamentSync?.mutate('updateGamesPerSet', { gamesPerSet: newTarget })
+                .catch(error => showToast(error.message || 'No se pudieron cambiar los games.'));
             return;
         }
 
@@ -783,9 +1059,18 @@ import { createAppController } from './app/app-controller.js';
         showToast(`Sets a ${tournamentState.value.gamesPerSet} games`);
     }
 
-    function setPlayerCount(newCount) {
-        if (isNaN(newCount)) return;
-        newCount = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, newCount));
+    async function setPlayerCount(newCount) {
+        if (generatingFixture) return;
+        if (tournamentId) {
+            document.getElementById('player-count').value = tournamentState.value.numPlayers;
+            showToast('La cantidad de jugadores queda bloqueada al crear el torneo.');
+            return;
+        }
+        if (!Number.isInteger(newCount) || newCount < MIN_PLAYERS || newCount > MAX_PLAYERS) {
+            document.getElementById('player-count').value = tournamentState.value.numPlayers;
+            showToast(`Elegí entre ${MIN_PLAYERS} y ${MAX_PLAYERS} jugadores.`);
+            return;
+        }
         if (newCount === tournamentState.value.numPlayers) {
             document.getElementById('player-count').value = tournamentState.value.numPlayers;
             return;
@@ -797,11 +1082,19 @@ import { createAppController } from './app/app-controller.js';
             return;
         }
 
+        const previousState = tournamentState.snapshot();
         rememberStateForUndo();
         const currentRoundCount = tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts);
         resizePlayers(newCount);
         tournamentState.value.numCourts = Math.min(tournamentState.value.numCourts, Math.floor(newCount / 4));
-        generateSchedule(currentRoundCount);
+        try {
+            await generateScheduleWithoutBlocking(currentRoundCount);
+        } catch (error) {
+            tournamentState.replace(previousState);
+            renderAll();
+            showToast('No se pudo generar el fixture.');
+            return;
+        }
         tournamentState.value.collapsedRounds = {};
         saveLocal();
         logActivity(`cambió la cantidad de jugadores a ${tournamentState.value.numPlayers}`);
@@ -809,12 +1102,17 @@ import { createAppController } from './app/app-controller.js';
         showToast(`${newCount} jugadores · fixture actualizado`);
     }
 
-    function setRoundCount(newCount) {
+    async function setRoundCount(newCount) {
+        if (generatingFixture) return;
         if (Number.isNaN(newCount)) {
             document.getElementById('round-count').value = tournamentState.value.schedule.length;
             return;
         }
-        newCount = Math.max(MIN_ROUNDS, Math.min(MAX_ROUNDS, newCount));
+        if (!Number.isInteger(newCount) || newCount < MIN_ROUNDS || newCount > MAX_ROUNDS) {
+            document.getElementById('round-count').value = tournamentState.value.schedule.length;
+            showToast(`Elegí entre ${MIN_ROUNDS} y ${MAX_ROUNDS} rondas.`);
+            return;
+        }
         const currentCount = tournamentState.value.schedule.length;
         if (newCount === currentCount) {
             document.getElementById('round-count').value = currentCount;
@@ -822,27 +1120,57 @@ import { createAppController } from './app/app-controller.js';
         }
         if (newCount < currentCount) {
             const roundsToRemove = tournamentState.value.schedule.slice(newCount);
-            const hasRecordedResults = hasResults(roundsToRemove, isMatchDone);
+            const hasRecordedResults = hasAnyScore(roundsToRemove);
             if (hasRecordedResults) {
-                document.getElementById('round-count').value = currentCount;
-                showToast('No se pueden quitar rondas que ya tienen resultados cargados.');
-                return;
-            }
-            if (!confirm(`¿Quitar las últimas ${currentCount - newCount} ronda${currentCount - newCount === 1 ? '' : 's'}?`)) {
+                if (!confirm(`Las rondas que vas a quitar tienen puntajes cargados. ¿Eliminar esas ${currentCount - newCount} ronda${currentCount - newCount === 1 ? '' : 's'} y sus resultados?`)) {
+                    document.getElementById('round-count').value = currentCount;
+                    return;
+                }
+            } else if (!confirm(`¿Quitar las últimas ${currentCount - newCount} ronda${currentCount - newCount === 1 ? '' : 's'}?`)) {
                 document.getElementById('round-count').value = currentCount;
                 return;
             }
         }
+        if (tournamentId) {
+            tournamentSync?.mutate('changeRoundCount', {
+                targetCount: newCount,
+                confirmDeleteScores: newCount < currentCount
+                    && hasAnyScore(tournamentState.value.schedule.slice(newCount))
+            }).catch(error => {
+                showToast(error.message || 'No se pudo cambiar la cantidad de rondas.');
+                renderAll();
+            });
+            return;
+        }
 
+        const previousState = tournamentState.snapshot();
         rememberStateForUndo();
-        const resized = resizeRounds({
-            schedule: tournamentState.value.schedule,
-            collapsedRounds: tournamentState.value.collapsedRounds,
-            targetCount: newCount,
-            createRound: createAutomaticRound
-        });
-        tournamentState.value.schedule = resized.schedule;
-        tournamentState.value.collapsedRounds = resized.collapsedRounds;
+        if (newCount > currentCount) {
+            let extended;
+            try {
+                extended = await extendScheduleWithoutBlocking(newCount);
+            } catch (error) {
+                tournamentState.replace(previousState);
+                renderAll();
+                showToast('No se pudieron agregar las rondas.');
+                return;
+            }
+            tournamentState.value.schedule = extended.schedule;
+            tournamentState.value.scheduleFingerprint = extended.scheduleFingerprint;
+            tournamentState.value.diagnostic = extended.diagnostic;
+        } else {
+            tournamentState.value.schedule = tournamentState.value.schedule.slice(0, newCount);
+            tournamentState.value.scheduleFingerprint = scheduleFingerprint(
+                tournamentState.value.schedule,
+                currentConfiguration(),
+                tournamentState.value.fixtureVariant
+            );
+        }
+        tournamentState.value.scheduleRevision += 1;
+        tournamentState.value.collapsedRounds = Object.fromEntries(
+            Object.entries(tournamentState.value.collapsedRounds)
+                .filter(([index]) => Number(index) < newCount)
+        );
         saveLocal();
         logActivity(`cambió la cantidad de rondas a ${newCount}`);
         renderAll();
@@ -873,7 +1201,7 @@ import { createAppController } from './app/app-controller.js';
 
     function updateUndoButton() {
         const button = document.getElementById('undo-button');
-        if (button) button.disabled = !stateStore.hasUndo();
+        if (button) button.disabled = Boolean(tournamentId) || generatingFixture || !stateStore.hasUndo();
     }
 
     function undoLastChange() {
@@ -885,11 +1213,12 @@ import { createAppController } from './app/app-controller.js';
     }
 
     function setState(state) {
-        const normalized = normalizeState({ ...getState(), ...state }, {
-            maxCourts: MAX_COURTS,
-            minGamesPerSet: MIN_GAMES_PER_SET,
-            maxGamesPerSet: MAX_GAMES_PER_SET
-        });
+        if (generatingFixture) {
+            fixtureGenerationRevision += 1;
+            fixtureGeneratorWorker.cancel();
+            generatingFixture = false;
+        }
+        const normalized = normalizeState(state);
         tournamentState.replace(normalized);
         document.getElementById('player-count').value = tournamentState.value.numPlayers;
         document.getElementById('court-count').value = tournamentState.value.numCourts;
@@ -898,8 +1227,7 @@ import { createAppController } from './app/app-controller.js';
     }
 
     function saveLocal() {
-        localStateStore.save(getState());
-        queueRemoteSave();
+        if (!tournamentId) localStateStore.save(getState());
     }
 
     function setSyncStatus(message) {
@@ -918,7 +1246,7 @@ import { createAppController } from './app/app-controller.js';
         status.hidden = false;
         const peopleLabel = `${people.length} persona${people.length === 1 ? '' : 's'} conectada${people.length === 1 ? '' : 's'}`;
         const devicesLabel = devices !== people.length ? ` · ${devices} dispositivos` : '';
-        const canSeeDetails = sessionRole === 'admin' || sessionRole === 'superAdmin';
+        const canSeeDetails = canManageCurrentTournament();
         const detail = canSeeDetails && people.length
             ? ` — ${people.map(person => `${person.actorName} (${formatPresenceRole(person.role)})`).join(', ')}`
             : '';
@@ -1147,10 +1475,6 @@ import { createAppController } from './app/app-controller.js';
         if (realtimeDb) return realtimeDb;
         try {
             realtimeDb = await firebaseClient.getDatabase();
-            tournamentMetadataStore = createTournamentMetadataStore({
-                database: realtimeDb,
-                serverTimestamp: () => firebaseClient.serverTimestamp()
-            });
             return realtimeDb;
         } catch (error) {
             console.error(error);
@@ -1161,6 +1485,11 @@ import { createAppController } from './app/app-controller.js';
 
     async function connectToTournament(id) {
         try {
+            if (generatingFixture) {
+                fixtureGenerationRevision += 1;
+                fixtureGeneratorWorker.cancel();
+                generatingFixture = false;
+            }
             await ensureFirebase();
             if (tournamentSync) tournamentSync.disconnect();
             if (tournamentIdentity) tournamentIdentity.disconnect();
@@ -1168,16 +1497,22 @@ import { createAppController } from './app/app-controller.js';
             tournamentId = id;
             historyRecordedForTournament = false;
             actorPlayerId = null;
+            tournamentAccessRole = null;
             claimedPlayers = {};
             identityPromptShown = false;
             claimsLoaded = false;
             sharedStateLoaded = false;
             updateIdentityStatus();
             setSyncStatus('Conectando al torneo compartido…');
+            if (invitationToken) {
+                await firebaseClient.callFunction('joinTournamentV2', {
+                    tournamentId: id,
+                    token: invitationToken
+                }, { allowAnonymous: true });
+            }
             tournamentSync = createTournamentSync({
                 database: realtimeDb,
-                serverTimestamp: () => firebaseClient.serverTimestamp(),
-                getState,
+                callFunction: (...args) => firebaseClient.callFunction(...args),
                 getStateSignature,
                 onStatus: setSyncStatus,
                 onRemoteState: (remoteState, { changedByAnotherDevice }) => {
@@ -1190,29 +1525,16 @@ import { createAppController } from './app/app-controller.js';
                     stateStore.clearUndo();
                     updateUndoButton();
                 }
-                setState(remoteState);
+                setState({
+                    ...remoteState,
+                    ui: { collapsedRounds: tournamentState.value.collapsedRounds }
+                });
                 rememberCurrentTournament();
                 maybeRequestIdentity();
                 }
             });
             tournamentRef = tournamentSync.connect(id);
-            tournamentIdentity = createTournamentIdentity({
-                tournamentRef,
-                presenceId,
-                serverTimestamp: () => firebaseClient.serverTimestamp(),
-                getPlayerName: id => tournamentState.value.players[id],
-                getDeviceLabel,
-                authUid: sessionUser?.uid || '',
-                actorRole: sessionRole || 'spectator',
-                onPresenceCount: () => {},
-                onPresence: setPresenceStatus,
-                onClaims: claims => {
-                    claimedPlayers = claims;
-                    claimsLoaded = true;
-                    refreshIdentityChoiceIfNeeded();
-                    maybeRequestIdentity();
-                }
-            });
+            tournamentIdentity = createV2TournamentIdentity(id);
             activityLog = createActivityLog({
                 tournamentRef,
                 serverTimestamp: () => firebaseClient.serverTimestamp(),
@@ -1225,12 +1547,81 @@ import { createAppController } from './app/app-controller.js';
             });
             activityLog.connect();
             await tournamentIdentity.connect({ actorName: getActorName(), actorPlayerId });
-            await migrateLegacyTournamentIfNeeded();
-        } catch (error) { /* status set in ensureFirebase */ }
+        } catch (error) {
+            console.error(error);
+            setSyncStatus(error?.message || 'No se pudo ingresar al torneo compartido');
+        }
     }
 
-    function queueRemoteSave() {
-        tournamentSync?.queueSave();
+    function createV2TournamentIdentity(id) {
+        let presenceRef = null;
+        let presenceListRef = null;
+        let presenceListener = null;
+        async function refreshAccess() {
+            const view = await firebaseClient.callFunction('getTournamentAccessViewV2', {
+                tournamentId: id
+            }, { allowAnonymous: true });
+            claimedPlayers = Object.fromEntries((view.claimedPlayerIds || []).map(playerId => [playerId, {
+                uid: playerId === view.playerId ? sessionUser?.uid : 'ocupado'
+            }]));
+            tournamentAccessRole = view.role || null;
+            claimsLoaded = true;
+            if (Number.isInteger(view.playerId)) actorPlayerId = view.playerId;
+            renderAuthStatus();
+            renderPlayers();
+            renderRounds();
+            refreshIdentityChoiceIfNeeded();
+            maybeRequestIdentity();
+            return view;
+        }
+        return {
+            async connect({ actorName = 'Espectador', actorPlayerId: connectedPlayerId = null } = {}) {
+                await refreshAccess();
+                if (!sessionUser?.uid) return;
+                presenceRef = realtimeDb.ref(`tournamentPresence/${id}/${sessionUser.uid}`);
+                presenceListRef = realtimeDb.ref(`tournamentPresence/${id}`);
+                presenceListener = snapshot => setPresenceStatus(snapshot.val() || {});
+                presenceListRef.on('value', presenceListener);
+                await presenceRef.onDisconnect().remove();
+                await presenceRef.set({
+                    uid: sessionUser.uid,
+                    role: Number.isInteger(connectedPlayerId) ? 'participant' : 'spectator',
+                    actorPlayerId: connectedPlayerId,
+                    actorName,
+                    device: getDeviceLabel(),
+                    updatedAt: firebaseClient.serverTimestamp()
+                });
+            },
+            async claimPlayer(playerId) {
+                await firebaseClient.callFunction('claimTournamentPlayerV2', {
+                    tournamentId: id,
+                    playerId
+                }, { allowAnonymous: true });
+                actorPlayerId = playerId;
+                await refreshAccess();
+                await this.updatePresence({
+                    actorPlayerId: playerId,
+                    actorName: tournamentState.value.players[playerId]
+                });
+                return true;
+            },
+            async restoreClaim(playerId) {
+                actorPlayerId = playerId;
+            },
+            async updatePresence({ actorPlayerId: playerId = null, actorName = 'Espectador' } = {}) {
+                if (!presenceRef) return;
+                await presenceRef.update({
+                    role: Number.isInteger(playerId) ? 'participant' : 'spectator',
+                    actorPlayerId: playerId,
+                    actorName,
+                    updatedAt: firebaseClient.serverTimestamp()
+                });
+            },
+            disconnect() {
+                if (presenceListRef && presenceListener) presenceListRef.off('value', presenceListener);
+                presenceRef?.remove().catch(() => {});
+            }
+        };
     }
 
     async function saveRemoteNow() {
@@ -1261,6 +1652,56 @@ import { createAppController } from './app/app-controller.js';
         closeTournamentNameModal(null);
     }
 
+    function createRandomRequestId() {
+        return (crypto.randomUUID
+            ? crypto.randomUUID()
+            : Array.from(
+                crypto.getRandomValues(new Uint8Array(16)),
+                byte => byte.toString(16).padStart(2, '0')
+            ).join('')
+        ).replace(/-/g, '');
+    }
+
+    async function createRemoteTournament({
+        configuration,
+        numRounds,
+        gamesPerSet,
+        players,
+        metadata
+    }) {
+        await ensureFirebase();
+        const created = await firebaseClient.callFunction('createTournamentV2', {
+            creationRequestId: createRandomRequestId(),
+            configuration,
+            numRounds,
+            gamesPerSet,
+            players,
+            metadata
+        });
+        tournamentId = created.tournamentId;
+        invitationToken = '';
+        try {
+            const invitation = await firebaseClient.callFunction('createTournamentInvitationV2', {
+                tournamentId,
+                role: 'participant'
+            });
+            invitationToken = invitation.token;
+        } catch (error) {
+            // El torneo ya existe y el owner puede abrirlo. El botón Compartir
+            // volverá a intentar crear una invitación.
+        }
+        history.replaceState(null, '', createSharedTournamentUrl(
+            location.origin,
+            location.pathname,
+            tournamentId,
+            invitationToken
+        ));
+        stateStore.clearUndo();
+        updateUndoButton();
+        await connectToTournament(tournamentId);
+        return created;
+    }
+
     async function createSharedTournament(copyLink = false) {
         if (!tournamentId) {
             if (!sessionUser || !['admin', 'superAdmin'].includes(sessionRole)) {
@@ -1275,20 +1716,28 @@ import { createAppController } from './app/app-controller.js';
             tournamentState.value.tournamentDate = getTodayISODate();
 
             // Un torneo nuevo conserva la configuración, pero siempre empieza sin resultados.
-            generateSchedule(tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts));
+            try {
+                await generateScheduleWithoutBlocking(tournamentState.value.schedule.length || getNumRounds());
+            } catch (error) {
+                showToast('No se pudo preparar el fixture.');
+                return;
+            }
             tournamentState.value.collapsedRounds = {};
-            const id = (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
-            tournamentId = id;
-            history.replaceState(null, '', `${location.pathname}?torneo=${id}`);
-            saveLocal();
-            renderAll();
-            // La metadata debe existir antes de conectar: al conectarse, los
-            // torneos sin metadata se tratan como legados y perderían el
-            // ownerUid del admin que los creó.
-            await ensureFirebase();
-            await tournamentMetadataStore?.initialize(id, sessionUser.uid);
-            await connectToTournament(id);
-            await saveRemoteNow();
+            try {
+                await createRemoteTournament({
+                    configuration: currentConfiguration(),
+                    numRounds: tournamentState.value.schedule.length,
+                    gamesPerSet: tournamentState.value.gamesPerSet,
+                    players: tournamentState.value.players,
+                    metadata: {
+                        tournamentName: tournamentState.value.tournamentName,
+                        tournamentDate: tournamentState.value.tournamentDate
+                    }
+                });
+            } catch (error) {
+                showToast(error?.message || 'No se pudo crear el torneo compartido.');
+                return;
+            }
         } else if (!tournamentRef) {
             await connectToTournament(tournamentId);
         }
@@ -1296,8 +1745,20 @@ import { createAppController } from './app/app-controller.js';
         else showToast('¡Torneo compartido creado! Ahora compartí el link.');
     }
 
-    function copyTournamentLink() {
-        const url = createSharedTournamentUrl(location.origin, location.pathname, tournamentId);
+    async function copyTournamentLink() {
+        if (!invitationToken && canManageCurrentTournament()) {
+            try {
+                const invitation = await firebaseClient.callFunction('createTournamentInvitationV2', {
+                    tournamentId,
+                    role: 'participant'
+                });
+                invitationToken = invitation.token;
+            } catch (error) {
+                showToast('No se pudo crear una invitación nueva.');
+                return;
+            }
+        }
+        const url = createSharedTournamentUrl(location.origin, location.pathname, tournamentId, invitationToken);
         navigator.clipboard.writeText(url).then(() => showToast('¡Link copiado! Todos verán los cambios al instante.'))
             .catch(() => prompt('Copiá este link:', url));
     }
@@ -1355,26 +1816,63 @@ import { createAppController } from './app/app-controller.js';
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = async (ev) => {
             try {
-                rememberStateForUndo();
-                setState(importStateJSON(ev.target.result));
-                saveLocal();
-                logActivity('importó un archivo del torneo');
-                showToast('Datos importados');
+                const imported = importStateJSON(ev.target.result);
+                if (!confirm(
+                    'Importar crea un torneo nuevo. Se conservarán configuración, nombres, games y rondas, '
+                    + 'pero no resultados, correcciones manuales, dueño, permisos ni actividad. ¿Continuar?'
+                )) return;
+                if (!sessionUser || !['admin', 'superAdmin'].includes(sessionRole)) {
+                    showToast('Iniciá sesión como admin para importar y crear el torneo.');
+                    openAuthModal();
+                    return;
+                }
+                await createRemoteTournament({
+                    configuration: imported.configuration,
+                    numRounds: imported.state.numRounds,
+                    gamesPerSet: imported.state.gamesPerSet,
+                    players: imported.state.players,
+                    metadata: {
+                        tournamentName: imported.metadata.tournamentName || 'Torneo importado',
+                        tournamentDate: imported.metadata.tournamentDate
+                    }
+                });
+                showToast('Torneo nuevo creado desde el archivo, sin resultados anteriores.');
             } catch (err) {
-                showToast('Archivo inválido');
+                showToast(err?.message || 'Archivo inválido');
             }
         };
         reader.readAsText(file);
         e.target.value = '';
     });
 
-    function resetSchedule() {
+    async function resetSchedule() {
+        if (generatingFixture) return;
         if (!confirm('¿Regenerar el fixture? Se pierden los resultados pero se mantienen los nombres.')) return;
+        if (tournamentId) {
+            tournamentSync?.mutate('regenerateFixture', {
+                confirmDeleteScores: hasAnyScore(tournamentState.value.schedule)
+            }).catch(error => showToast(error.message || 'No se pudo regenerar el fixture.'));
+            return;
+        }
         rememberStateForUndo();
+        const previousState = tournamentState.snapshot();
         const savedPlayers = [...tournamentState.value.players];
-        generateSchedule(tournamentState.value.schedule.length || getNumRounds(tournamentState.value.numPlayers, tournamentState.value.numCourts));
+        const nextVariant = tournamentState.value.fixtureVariant + 1;
+        try {
+            await generateScheduleWithoutBlocking(
+                tournamentState.value.schedule.length || getNumRounds(),
+                nextVariant
+            );
+        } catch (error) {
+            tournamentState.replace(previousState);
+            renderAll();
+            showToast(error.code === 'NO_MORE_FIXTURE_VARIANTS'
+                ? 'No quedan variantes diferentes para esta configuración.'
+                : 'No se pudo regenerar el fixture.');
+            return;
+        }
         tournamentState.value.players = savedPlayers;
         tournamentState.value.collapsedRounds = {};
         saveLocal();
@@ -1384,10 +1882,18 @@ import { createAppController } from './app/app-controller.js';
     }
 
     function resetAll() {
+        if (generatingFixture) return;
+        if (tournamentId) {
+            showToast('Un torneo creado conserva su configuración. Creá otro para cambiarla.');
+            return;
+        }
         if (!confirm('¿Borrar todo (nombres y resultados)?')) return;
         rememberStateForUndo();
         tournamentState.value.numPlayers = 9;
         tournamentState.value.numCourts = 2;
+        tournamentState.value.pairingMode = 'rotating';
+        tournamentState.value.fixedTeams = [];
+        tournamentState.value.fixtureVariant = 0;
         tournamentState.value.gamesPerSet = 4;
         tournamentState.value.players = defaultPlayers(tournamentState.value.numPlayers);
         generateSchedule();
@@ -1415,6 +1921,14 @@ import { createAppController } from './app/app-controller.js';
     function renderPlayers() {
         const container = document.getElementById('players-container');
         renderPlayerList(container, tournamentState.value.players, (index, previousName, nextName) => {
+            if (tournamentId) {
+                tournamentSync?.mutate('renamePlayer', { playerId: index, name: nextName })
+                    .catch(error => {
+                        showToast(error.message || 'No se pudo cambiar el nombre.');
+                        renderPlayers();
+                    });
+                return;
+            }
             rememberStateForUndo();
             tournamentState.value.players[index] = nextName;
             saveLocal();
@@ -1422,12 +1936,20 @@ import { createAppController } from './app/app-controller.js';
             updateIdentityStatus();
             renderRounds();
             calculateStats();
-        });
+            renderFixtureConfiguration();
+        }, index => !tournamentId || canManageCurrentTournament() || actorPlayerId === index);
     }
 
-    function canEditMatch(match) {
-        if (!tournamentId || ['admin', 'superAdmin'].includes(sessionRole)) return true;
-        return Number.isInteger(actorPlayerId) && [match.t1_p1, match.t1_p2, match.t2_p1, match.t2_p2].includes(actorPlayerId);
+    function canEditPairing(match) {
+        if (tournamentState.value.pairingMode === 'fixed' || hasAnyScore([{ matches: [match] }])) return false;
+        if (!tournamentId) return true;
+        return canManageCurrentTournament();
+    }
+
+    function canEditScore(match) {
+        if (!tournamentId || canManageCurrentTournament()) return true;
+        return Number.isInteger(actorPlayerId)
+            && [match.t1_p1, match.t1_p2, match.t2_p1, match.t2_p2].includes(actorPlayerId);
     }
 
     function askPlayerChange(previousPlayer, selectedPlayer) {
@@ -1453,6 +1975,11 @@ import { createAppController } from './app/app-controller.js';
     }
 
     async function updateMatchPlayer(roundIdx, matchIdx, role, newValue) {
+        if (tournamentState.value.pairingMode === 'fixed') {
+            renderRounds();
+            showToast('Las parejas fijas no se pueden modificar.');
+            return;
+        }
         const round = tournamentState.value.schedule[roundIdx];
         const selectedPlayer = parseInt(newValue, 10);
         const targetMatch = round.matches[matchIdx];
@@ -1464,39 +1991,50 @@ import { createAppController } from './app/app-controller.js';
             renderRounds();
             return;
         }
-        if (tournamentId && !['admin', 'superAdmin'].includes(sessionRole)) {
-            if (scope === 'future') {
-                showToast('Como jugador sólo podés corregir la ronda actual.');
-                renderRounds();
-                return;
-            }
-            try {
-                await firebaseClient.callFunction('updateParticipantPairing', {
-                    tournamentId, roundIndex: roundIdx, matchIndex: matchIdx, role, playerId: selectedPlayer
-                }, { allowAnonymous: true });
-            } catch (error) {
-                console.error(error);
-                showToast(error.message || 'No se pudo corregir esa pareja.');
-                renderRounds();
-            }
+        if (tournamentId && !canManageCurrentTournament()) {
+            showToast('Sólo un administrador del torneo puede corregir las parejas.');
+            renderRounds();
             return;
         }
-        if (scope === 'future') {
-            if (hasRecordedScoresFromRound(tournamentState.value.schedule, roundIdx, isMatchDone)) {
-                renderRounds();
-                showToast('No se puede cambiar el resto: ya hay resultados cargados desde esta ronda.');
-                return;
-            }
-            rememberStateForUndo();
-            for (let index = roundIdx; index < tournamentState.value.schedule.length; index++) {
-                swapPlayersInRound(tournamentState.value.schedule[index], previousPlayer, selectedPlayer, tournamentState.value.numPlayers);
-            }
-        } else {
-            rememberStateForUndo();
-            applySingleRoundPlayerChange(round, targetMatch, role, previousPlayer, selectedPlayer, tournamentState.value.numPlayers);
+        const sourceMatch = round.matches.find(match =>
+            match !== targetMatch
+            && [match.t1_p1, match.t1_p2, match.t2_p1, match.t2_p2].includes(selectedPlayer));
+        const affectedMatches = sourceMatch ? [targetMatch, sourceMatch] : [targetMatch];
+        if (hasAnyScore([{ matches: affectedMatches }])) {
+            renderRounds();
+            showToast('No se puede cambiar: uno de los partidos afectados ya tiene puntaje.');
+            return;
         }
+        if (tournamentId) {
+            tournamentSync?.mutate('updateRotatingPairing', {
+                expectedScheduleRevision: tournamentState.value.scheduleRevision,
+                expectedScheduleFingerprint: tournamentState.value.scheduleFingerprint,
+                roundId: round.id,
+                matchId: targetMatch.id,
+                expectedPlayerIds: [
+                    targetMatch.t1_p1,
+                    targetMatch.t1_p2,
+                    targetMatch.t2_p1,
+                    targetMatch.t2_p2
+                ],
+                role,
+                playerId: selectedPlayer
+            }).catch(error => {
+                showToast(error.message || 'No se pudo corregir la pareja.');
+                renderRounds();
+            });
+            return;
+        }
+        rememberStateForUndo();
+        applySingleRoundPlayerChange(round, targetMatch, role, previousPlayer, selectedPlayer, tournamentState.value.numPlayers);
+        tournamentState.value.scheduleRevision += 1;
+        tournamentState.value.scheduleFingerprint = scheduleFingerprint(
+            tournamentState.value.schedule,
+            currentConfiguration(),
+            tournamentState.value.fixtureVariant
+        );
         saveLocal();
-        logActivity(`${scope === 'future' ? 'reemplazó en las rondas restantes' : 'cambió en esta ronda'} a ${tournamentState.value.players[previousPlayer]} por ${tournamentState.value.players[selectedPlayer]}`);
+        logActivity(`cambió en esta ronda a ${tournamentState.value.players[previousPlayer]} por ${tournamentState.value.players[selectedPlayer]}`);
         renderRounds();
         calculateStats();
     }
@@ -1504,13 +2042,26 @@ import { createAppController } from './app/app-controller.js';
     function updateScore(roundIdx, matchIdx, team, value) {
         const nextScore = normalizeScore(value, tournamentState.value.gamesPerSet);
         if (tournamentState.value.schedule[roundIdx].matches[matchIdx][team] === nextScore) return;
-        if (tournamentId && !['admin', 'superAdmin'].includes(sessionRole)) {
-            firebaseClient.callFunction('updateParticipantScore', {
-                tournamentId, roundIndex: roundIdx, matchIndex: matchIdx, team, score: nextScore
-            }, { allowAnonymous: true })
+        if (tournamentId) {
+            const round = tournamentState.value.schedule[roundIdx];
+            const match = round.matches[matchIdx];
+            tournamentSync?.mutate('updateScore', {
+                expectedScheduleRevision: tournamentState.value.scheduleRevision,
+                expectedScheduleFingerprint: tournamentState.value.scheduleFingerprint,
+                roundId: round.id,
+                matchId: match.id,
+                expectedPlayerIds: [
+                    match.t1_p1,
+                    match.t1_p2,
+                    match.t2_p1,
+                    match.t2_p2
+                ],
+                field: team,
+                value: nextScore
+            })
                 .catch(error => {
                     console.error(error);
-                    showToast('Sólo podés cargar resultados de los partidos que jugás.');
+                    showToast(error.message || 'No se pudo cargar el resultado.');
                     renderRounds();
                 });
             return;
@@ -1525,6 +2076,7 @@ import { createAppController } from './app/app-controller.js';
         calculateStats();
         updateProgress();
         renderRounds();
+        renderAuthStatus();
     }
 
     function adjustScore(roundIdx, matchIdx, team, amount) {
@@ -1567,7 +2119,8 @@ import { createAppController } from './app/app-controller.js';
             onUpdatePlayer: updateMatchPlayer,
             onAdjustScore: adjustScore,
             onUpdateScore: updateScore,
-            canEditMatch
+            canEditPairing,
+            canEditScore
         });
     }
 
@@ -1638,10 +2191,11 @@ import { createAppController } from './app/app-controller.js';
 
     function renderAll() {
         updateTournamentHeader();
-        renderAuthStatus();
         updateIdentityStatus();
         updateUndoButton();
         updateSubtitle();
+        renderAuthStatus();
+        renderFixtureConfiguration();
         renderPreviousTournaments();
         renderPlayers();
         renderRounds();
@@ -1663,8 +2217,15 @@ import { createAppController } from './app/app-controller.js';
     generateSchedule();
     if (!loadFromHash()) {
         const saved = loadLocal();
-        if (saved) setState(saved);
-        else renderAll();
+        if (saved) {
+            try {
+                setState(saved);
+            } catch (error) {
+                localStateStore.remove();
+                renderAll();
+                showToast('El borrador anterior no es compatible con la versión 2.');
+            }
+        } else renderAll();
     }
     if (tournamentId) connectToTournament(tournamentId);
     else loadSharedTournamentCatalog();
@@ -1679,6 +2240,7 @@ import { createAppController } from './app/app-controller.js';
     continueIdentitySelection, copyTournamentSummary, createSharedTournament,
     enterAsSpectator, exportJSON, goHome, importJSON, openActivityModal, openAuthModal, openPreviousTournament, openSummaryModal,
     resetAll, resetSchedule, sendPasswordReset, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
+    setPairingMode, setFixedTeamPlayer,
     shareState, shareTournamentSummary, showIdentityChoice, showMainPage, showTournamentHistory, signInWithEmailAndPassword,
     signInWithGoogle, signOut, closeAuthModal, undoLastChange,
     openUsersModal, closeUsersModal, createAdminUser, deleteAdminUser,

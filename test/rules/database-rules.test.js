@@ -1,4 +1,3 @@
-import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import {
@@ -12,54 +11,103 @@ const testEnv = await initializeTestEnvironment({
     projectId: 'padel-rules-test',
     database: { rules }
 });
-const tournamentId = 'abcdefgh';
-const tournament = {
-    metadata: { ownerUid: 'owner', admins: { owner: true, admin: true } },
-    claims: { 0: { uid: 'player', presenceId: 'phone' } },
-    state: {
-        gamesPerSet: 4,
-        schedule: [{ matches: [{ t1_p1: 0, t1_p2: 1, t2_p1: 2, t2_p2: 3, score1: '', score2: '' }] }]
-    }
-};
+const tournamentId = 't_012345678901234567890123456789';
 
 async function seed() {
     await testEnv.withSecurityRulesDisabled(async context => {
-        await context.database().ref(`tournaments/${tournamentId}`).set(tournament);
+        await context.database().ref().set({
+            tournaments: {
+                [tournamentId]: {
+                    public: {
+                        schemaVersion: 2,
+                        configuration: { numPlayers: 8, numCourts: 2, pairingMode: 'rotating' },
+                        metadata: { ownerUid: 'owner' },
+                        state: { revision: 0 }
+                    },
+                    _server: {
+                        operationReceipts: { secret: { digest: 'privado' } }
+                    }
+                }
+            },
+            tournamentAccess: {
+                [tournamentId]: {
+                    members: {
+                        owner: { role: 'admin' },
+                        admin: { role: 'admin' },
+                        viewer: { role: 'spectator' },
+                        player: { role: 'participant' }
+                    },
+                    claims: { 0: { uid: 'player' } },
+                    invitationHashes: { secreto: { role: 'participant' } }
+                }
+            }
+        });
     });
 }
 
-test('lectura requiere una sesión, incluso para espectadores', async () => {
+test('sólo miembros autorizados pueden leer public', async () => {
     await seed();
-    await assertFails(testEnv.unauthenticatedContext().database().ref(`tournaments/${tournamentId}`).once('value'));
-    await assertSucceeds(testEnv.authenticatedContext('viewer').database().ref(`tournaments/${tournamentId}`).once('value'));
+    const path = `tournaments/${tournamentId}/public`;
+    await assertFails(testEnv.unauthenticatedContext().database().ref(path).once('value'));
+    await assertFails(testEnv.authenticatedContext('foreign').database().ref(path).once('value'));
+    await assertSucceeds(testEnv.authenticatedContext('viewer').database().ref(path).once('value'));
+    await assertSucceeds(testEnv.authenticatedContext('player').database().ref(path).once('value'));
 });
 
-test('un participante no puede escribir resultados directamente', async () => {
+test('ni miembros ni administradores pueden leer el nodo privado del torneo', async () => {
     await seed();
-    const playerDb = testEnv.authenticatedContext('player').database();
-    const otherDb = testEnv.authenticatedContext('other').database();
-    const score = `tournaments/${tournamentId}/state/schedule/0/matches/0/score1`;
-    await assertFails(playerDb.ref(score).set(4));
-    await assertFails(otherDb.ref(score).set(4));
-    await assertFails(playerDb.ref(`tournaments/${tournamentId}/state/gamesPerSet`).set(8));
+    for (const [uid, claims] of [
+        ['owner', {}],
+        ['admin', {}],
+        ['super', { platformRole: 'superAdmin' }]
+    ]) {
+        const database = testEnv.authenticatedContext(uid, claims).database();
+        await assertFails(database.ref(`tournaments/${tournamentId}`).once('value'));
+        await assertFails(database.ref(`tournaments/${tournamentId}/_server`).once('value'));
+    }
 });
 
-test('metadata, presencia y claims quedan acotados a su usuario', async () => {
+test('toda escritura directa del dominio se deniega bajo cualquier rol', async () => {
     await seed();
-    const playerDb = testEnv.authenticatedContext('player').database();
-    const otherDb = testEnv.authenticatedContext('other').database();
-    await assertSucceeds(playerDb.ref(`tournaments/${tournamentId}/presence/phone`).set({ uid: 'player', presenceId: 'phone' }));
-    await assertFails(otherDb.ref(`tournaments/${tournamentId}/presence/phone`).set({ uid: 'player' }));
-    await assertFails(otherDb.ref(`tournaments/${tournamentId}/claims/0`).remove());
-    await assertFails(playerDb.ref(`tournaments/${tournamentId}/metadata/admins/other`).set(true));
+    const paths = [
+        `tournaments/${tournamentId}/state`,
+        `tournaments/${tournamentId}/configuration`,
+        `tournaments/${tournamentId}/public/configuration/numCourts`,
+        `tournaments/${tournamentId}/public/state/revision`,
+        `tournaments/${tournamentId}/public/state/schedule`,
+        `tournaments/${tournamentId}/public/metadata/tournamentName`
+    ];
+    for (const [uid, claims] of [
+        ['owner', {}],
+        ['admin', {}],
+        ['player', {}],
+        ['super', { platformRole: 'superAdmin' }]
+    ]) {
+        const database = testEnv.authenticatedContext(uid, claims).database();
+        for (const path of paths) await assertFails(database.ref(path).set('alterado'));
+    }
 });
 
-test('owner, admin asignado y super admin pueden administrar el estado', async () => {
+test('acceso, claims, invitaciones y recibos son privados y write-only del servidor', async () => {
     await seed();
-    const path = `tournaments/${tournamentId}/state/gamesPerSet`;
-    await assertSucceeds(testEnv.authenticatedContext('owner').database().ref(path).set(6));
-    await assertSucceeds(testEnv.authenticatedContext('admin').database().ref(path).set(6));
-    await assertSucceeds(testEnv.authenticatedContext('super', { platformRole: 'superAdmin' }).database().ref(path).set(6));
+    const database = testEnv.authenticatedContext('owner').database();
+    await assertFails(database.ref(`tournamentAccess/${tournamentId}`).once('value'));
+    await assertFails(database.ref(`tournamentAccess/${tournamentId}/claims/0`).remove());
+    await assertFails(database.ref(`tournamentAccess/${tournamentId}/invitationHashes`).set({}));
+    await assertFails(database.ref('creationRequests/owner').once('value'));
+});
+
+test('presencia efímera permite sólo el nodo propio de un miembro', async () => {
+    await seed();
+    const owner = testEnv.authenticatedContext('owner').database();
+    const foreign = testEnv.authenticatedContext('foreign').database();
+    const payload = { uid: 'owner', updatedAt: 1 };
+    await assertSucceeds(owner.ref(`tournamentPresence/${tournamentId}/owner`).set(payload));
+    await assertFails(owner.ref(`tournamentPresence/${tournamentId}/other`).set(payload));
+    await assertFails(foreign.ref(`tournamentPresence/${tournamentId}/foreign`).set({
+        uid: 'foreign',
+        updatedAt: 1
+    }));
 });
 
 after(async () => {

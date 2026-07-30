@@ -8,18 +8,20 @@ La versión pública está disponible en [sebasaversa.github.io/padel-torneo](ht
 
 - De 4 a 16 jugadores y selección de 1 o 2 canchas simultáneas, según la cantidad disponible.
 - Rondas independientes de la cantidad de jugadores, con descansos rotativos.
-- Parejas y cruces generados automáticamente; cada jugador puede corregirse en una ronda o hacia el resto del fixture.
+- Parejas rotativas balanceadas o equipos fijos canónicos, elegidos antes de crear el torneo.
+- Catálogo de diseños exactos y óptimos conocidos, con optimizador determinístico para las demás configuraciones.
+- Correcciones de parejas rotativas por ronda reservadas a administradores y bloqueadas si afectan partidos con puntaje.
 - Games por set configurables y anotación manual o mediante botones táctiles.
 - Tabla de posiciones con victorias, derrotas, games a favor/en contra y diferencia.
 - Torneos compartidos con actualización en tiempo real, presencia, identidad de jugador e historial de cambios.
 - Catálogo global de torneos compartidos, accesible desde la pantalla principal y ordenado por última actualización.
-- Exportación e importación de torneos en JSON, además de links locales de solo estado.
+- Exportación de auditoría e importación v2 como torneo nuevo, sin restaurar resultados, permisos ni actividad.
 - Diseño responsive para computadora y celular.
 
 ## Uso del torneo
 
-1. Ajustá cantidad de jugadores, canchas, rondas y games por set. Las rondas se pueden ingresar directamente o ajustar con los botones − y +.
-2. Editá los nombres si hace falta y revisá el fixture.
+1. Ajustá cantidad de jugadores, canchas, rondas, games por set y tipo de parejas. Los valores se pueden escribir y confirmar con Enter o ajustar con − y +.
+2. Editá los nombres y, si elegiste parejas fijas, organizá los equipos antes de crear.
 3. Tocá **Crear torneo compartido**, elegí un nombre y compartí el link.
 4. Cada participante selecciona quién es; esa identidad se muestra en la app y en el historial.
 5. Anotá resultados desde cualquier dispositivo: la tabla y los demás dispositivos se actualizan automáticamente.
@@ -30,7 +32,7 @@ Un link con `?torneo=<id>` es un torneo compartido en Firebase. Un link con `#s=
 
 - **Super admin:** inicia con Google, administra cuentas de admins, ve todos los torneos y puede recuperar los eliminados.
 - **Admin:** inicia con email y contraseña; crea sus torneos y administra la configuración completa de los que creó o le asignaron.
-- **Participante:** entra por link, elige su jugador y sólo puede corregir parejas o cargar resultados en los partidos que juega.
+- **Participante:** entra por invitación, elige su jugador y sólo puede cambiar su nombre o cargar resultados en los partidos que juega.
 - **Espectador:** entra por link sin elegir jugador y consulta el torneo en modo lectura.
 
 Las operaciones de participantes se validan en Cloud Functions y las reglas de Realtime Database bloquean las escrituras directas no autorizadas.
@@ -59,14 +61,17 @@ Para ejecutar las pruebas y generar una build de producción:
 
 ```bash
 npm test
+npm --prefix functions test
 npm run test:rules
+npm run test:functions-emulator
 npm run build
 npm run preview
 ```
 
 La build se genera en `dist/`. No se debe abrir `index.html` directamente: Vite resuelve los módulos y assets durante desarrollo y build.
 
-`npm run test:rules` inicia temporalmente el emulador de Realtime Database y prueba los permisos de lectura, presencia, claims, resultados y administración.
+`npm run test:rules` prueba las barreras de lectura y escritura directa.
+`npm run test:functions-emulator` levanta Auth, Realtime Database y Functions para un smoke integrado de creación idempotente, invitación, claim, score y extensión.
 
 ## Arquitectura
 
@@ -75,7 +80,7 @@ src/
   app.js                    Coordinación de la aplicación
   app/app-controller.js     Ciclo de vida e inicio
   state/                    Modelo y store del torneo
-  features/fixture/         Fixture, rondas y reemplazos
+  features/fixture/         Catálogo, análisis, optimizador, Worker y reemplazos
   features/scoring/         Puntajes, estadísticas y resumen
   services/                 Firebase, identidad, actividad, sharing y almacenamiento local
   ui/                       Listeners y componentes visuales
@@ -86,19 +91,29 @@ src/
 
 ## Firebase y datos compartidos
 
-La app utiliza Firebase Authentication anónima y Realtime Database. Para cada torneo compartido, la base contiene estas rutas:
+La app utiliza Firebase Authentication y Realtime Database con esquema v2. El cliente sólo lee `public` y envía mutaciones tipadas a Cloud Functions:
 
 ```text
 tournaments/{tournamentId}/
-  state                 Estado completo: jugadores, fixture, resultados y configuración
-  updatedAt             Marca de tiempo del último cambio
-  presence/{presenceId} Dispositivos conectados temporalmente
-  claims/{playerId}     Jugador reclamado por un dispositivo
-  history/{eventId}     Últimos cambios, actor, dispositivo y fecha
-  metadata              Propietario, admins asignados y borrado lógico
+  public/
+    schemaVersion       Versión de contrato, actualmente 2
+    configuration       Jugadores, canchas, modo, equipos y versiones write-once
+    metadata            Nombre, fecha, owner, timestamps y tombstone
+    state               Nombres, fixture, scores, revisiones y fingerprint
+    activity            Auditoría sanitizada por operationId
+  _server/
+    operationReceipts   Recibos idempotentes privados
+
+tournamentAccess/{tournamentId}/
+  members               Roles privados
+  claims                Jugadores reclamados
+  invitationHashes      Invitaciones opacas almacenadas sólo como hash
+
+tournamentPresence/{tournamentId}/{uid}
+                        Presencia efímera por usuario
 ```
 
-La configuración pública del proyecto Firebase vive en `src/app.js`; las credenciales de cliente de Firebase no son secretas. La protección real depende de las reglas de Realtime Database y de Firebase Authentication. Si se reutiliza el proyecto para otro torneo, mantené habilitado el acceso anónimo y configurá reglas que permitan únicamente las operaciones necesarias sobre `tournaments/{tournamentId}`.
+La configuración pública del proyecto Firebase vive en `src/app.js`; las credenciales de cliente no son secretas. La protección real depende de Authentication, Rules con denegación por defecto y Functions autoritativas. Ni owner, admin ni superadmin pueden escribir directamente configuración, fixture o scores.
 
 Los nombres de jugadores, resultados, historial e información genérica del navegador (por ejemplo, plataforma y navegador) se almacenan en el torneo compartido. No se registra nombre real del dispositivo ni información de cuenta.
 
@@ -117,6 +132,8 @@ GitHub Pages se publica automáticamente desde `master` mediante [`.github/workf
 3. Publica `dist/` con GitHub Pages.
 
 La URL pública se mantiene en `https://sebasaversa.github.io/padel-torneo/`. La configuración de Vite usa rutas relativas (`base: './'`) para que assets y módulos funcionen también dentro del subdirectorio de Pages.
+
+El primer despliegue v2 requiere el procedimiento manual de backup, limpieza de datos v1, Functions, Rules, smoke test y rollback compatible documentado en [`CUTOVER-FIXTURE-V2.md`](CUTOVER-FIXTURE-V2.md).
 
 ## Versiones
 

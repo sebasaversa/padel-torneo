@@ -113,13 +113,15 @@ Estructura prevista:
 
 ```text
 src/features/fixture/generator.js
-src/features/fixture/rounds.js
+src/features/fixture/analysis.js
+src/features/fixture/optimizer.js
+src/features/fixture/worker.js
 src/features/fixture/player-swaps.js
 ```
 
 Criterio de finalización: el fixture generado por la versión modular coincide con el actual para los mismos datos.
 
-Progreso final: `src/features/fixture/generator.js` contiene la generación de rondas, descansos, canchas y parejas para todas las cantidades actuales de jugadores. `src/features/fixture/rounds.js` concentra el agregado, eliminación y validación de rondas con resultados; `src/features/fixture/player-swaps.js`, los reemplazos. `npm test` verifica fixtures de 4 a 16 jugadores, rondas extra y la unicidad de jugadores durante reemplazos.
+Progreso final: `src/features/fixture/generator.js` orquesta catálogo, round-robin y optimización global; `analysis.js` valida estructura y métricas, y `worker.js` ejecuta fuera del hilo principal las configuraciones no catalogadas y las extensiones. `src/features/fixture/player-swaps.js` conserva las correcciones manuales permitidas. `npm test` verifica fixtures de 4 a 16 jugadores, rondas extra, propiedades reproducibles y la unicidad de jugadores durante reemplazos.
 
 ### 5. Extraer resultados y estadísticas
 

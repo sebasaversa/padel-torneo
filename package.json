@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "test": "node --test test/*.test.js",
     "test:rules": "firebase emulators:exec --only database \"node --test test/rules/database-rules.test.js\"",
+    "test:functions-emulator": "firebase emulators:exec --only auth,database,functions \"node --test functions/test/functions-emulator-v2.test.js\"",
     "emulators": "firebase emulators:start",
     "emulators:export": "firebase emulators:export .firebase-emulator-data",
     "deploy:functions": "firebase deploy --only functions",

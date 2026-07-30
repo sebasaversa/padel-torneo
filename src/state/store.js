@@ -38,10 +38,50 @@ export function createStateStore({ read, write, maxUndo = 20 }) {
 
 export function createTournamentState(initialState) {
     let current = clone(initialState);
+    const paths = {
+        numPlayers: ['configuration', 'numPlayers'],
+        numCourts: ['configuration', 'numCourts'],
+        pairingMode: ['configuration', 'pairingMode'],
+        fixedTeams: ['configuration', 'fixedTeams'],
+        tournamentName: ['metadata', 'tournamentName'],
+        tournamentDate: ['metadata', 'tournamentDate'],
+        players: ['state', 'players'],
+        gamesPerSet: ['state', 'gamesPerSet'],
+        schedule: ['state', 'schedule'],
+        fixtureVariant: ['state', 'fixtureVariant'],
+        scheduleRevision: ['state', 'scheduleRevision'],
+        scheduleFingerprint: ['state', 'scheduleFingerprint'],
+        revision: ['state', 'revision'],
+        diagnostic: ['state', 'diagnostic'],
+        collapsedRounds: ['ui', 'collapsedRounds']
+    };
+    const view = new Proxy({}, {
+        get(_target, property) {
+            const path = paths[property];
+            if (!path) return current[property];
+            return current[path[0]][path[1]];
+        },
+        set(_target, property, value) {
+            const path = paths[property];
+            if (!path) {
+                current[property] = value;
+                return true;
+            }
+            current[path[0]][path[1]] = value;
+            if (property === 'schedule') current.state.numRounds = value.length;
+            return true;
+        },
+        ownKeys() {
+            return Reflect.ownKeys(current);
+        },
+        getOwnPropertyDescriptor() {
+            return { enumerable: true, configurable: true };
+        }
+    });
 
     return {
         get value() {
-            return current;
+            return view;
         },
         snapshot() {
             return clone(current);

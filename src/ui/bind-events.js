@@ -66,6 +66,12 @@ export function bindStaticUIEvents(actions) {
         if (selection) actions.toggleTournamentDeletionSelection(selection.dataset.selectTournament, selection.checked);
     });
     document.getElementById('player-count')?.addEventListener('change', event => actions.setPlayerCount(parseInt(event.target.value, 10)));
+    document.getElementById('player-count')?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        actions.setPlayerCount(parseInt(event.target.value, 10));
+        event.target.blur();
+    });
     document.getElementById('round-count')?.addEventListener('change', event => actions.setRoundCount(parseInt(event.target.value, 10)));
     document.getElementById('round-count')?.addEventListener('keydown', event => {
         if (event.key !== 'Enter') return;
@@ -80,7 +86,24 @@ export function bindStaticUIEvents(actions) {
         actions.setCourtCount(parseInt(event.target.value, 10));
         event.target.blur();
     });
-    document.getElementById('games-per-set')?.addEventListener('input', event => actions.setGamesPerSet(parseInt(event.target.value, 10)));
+    document.getElementById('games-per-set')?.addEventListener('change', event => actions.setGamesPerSet(parseInt(event.target.value, 10)));
+    document.getElementById('games-per-set')?.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        actions.setGamesPerSet(parseInt(event.target.value, 10));
+        event.target.blur();
+    });
+    document.querySelectorAll('input[name="pairing-mode"]').forEach(input =>
+        input.addEventListener('change', event => actions.setPairingMode(event.target.value)));
+    document.getElementById('fixed-teams-container')?.addEventListener('change', event => {
+        const select = event.target.closest('[data-fixed-team-player]');
+        if (!select) return;
+        actions.setFixedTeamPlayer(
+            Number(select.dataset.teamIndex),
+            Number(select.dataset.memberIndex),
+            Number(select.value)
+        );
+    });
     document.getElementById('tournament-name-input')?.addEventListener('keydown', event => {
         if (event.key === 'Enter') actions.confirmTournamentName();
         if (event.key === 'Escape') actions.cancelTournamentName();

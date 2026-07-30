@@ -8,7 +8,9 @@ function buildPlayerSelect(players, playerIndex, roundIndex, matchIndex, role, d
 export function renderRoundCards(container, {
     schedule, players, gamesPerSet, collapsedRounds,
     getRestingPlayers, isMatchDone, isRoundDone, getScoreWarning,
-    onToggleRound, onUpdatePlayer, onAdjustScore, onUpdateScore, canEditMatch = () => true
+    onToggleRound, onUpdatePlayer, onAdjustScore, onUpdateScore,
+    canEditPairing = () => true,
+    canEditScore = () => true
 }) {
     container.innerHTML = schedule.map((round, roundIndex) => {
         const done = isRoundDone(round);
@@ -18,28 +20,29 @@ export function renderRoundCards(container, {
             : resting.length === 1 ? `Descansa: ${resting[0]}`
                 : `Descansan: ${resting.join(', ')}`;
         const matches = round.matches.map((match, matchIndex) => {
-            const editable = canEditMatch(match);
+            const pairingEditable = canEditPairing(match);
+            const scoreEditable = canEditScore(match);
             const matchDone = isMatchDone(match);
             const warning = getScoreWarning(match, gamesPerSet);
             const scoreControl = (team, label) => `
                 <div class="score-control ${team === 'score1' ? 'team-one' : 'team-two'}">
                     <button type="button" class="score-adjust" aria-label="Bajar puntaje del ${label} equipo en cancha ${match.court}"
-                        data-score-adjust data-round="${roundIndex}" data-match="${matchIndex}" data-team="${team}" data-amount="-1" ${editable ? '' : 'disabled'}>−</button>
+                        data-score-adjust data-round="${roundIndex}" data-match="${matchIndex}" data-team="${team}" data-amount="-1" ${scoreEditable ? '' : 'disabled'}>−</button>
                     <input type="number" min="0" max="${gamesPerSet}" class="score-input" placeholder="0" value="${match[team]}" inputmode="numeric"
-                        data-score-input data-round="${roundIndex}" data-match="${matchIndex}" data-team="${team}" ${editable ? '' : 'disabled'}>
+                        data-score-input data-round="${roundIndex}" data-match="${matchIndex}" data-team="${team}" ${scoreEditable ? '' : 'disabled'}>
                     <button type="button" class="score-adjust" aria-label="Subir puntaje del ${label} equipo en cancha ${match.court}"
-                        data-score-adjust data-round="${roundIndex}" data-match="${matchIndex}" data-team="${team}" data-amount="1" ${editable ? '' : 'disabled'}>+</button>
+                        data-score-adjust data-round="${roundIndex}" data-match="${matchIndex}" data-team="${team}" data-amount="1" ${scoreEditable ? '' : 'disabled'}>+</button>
                 </div>`;
             return `<div class="match ${matchDone ? 'match-done' : ''}">
                 <div class="court-title">📍 Cancha ${match.court}</div>
                 <div class="team team-one"><div class="team-pair">
-                    ${buildPlayerSelect(players, match.t1_p1, roundIndex, matchIndex, 't1_p1', !editable)}
-                    ${buildPlayerSelect(players, match.t1_p2, roundIndex, matchIndex, 't1_p2', !editable)}
+                    ${buildPlayerSelect(players, match.t1_p1, roundIndex, matchIndex, 't1_p1', !pairingEditable)}
+                    ${buildPlayerSelect(players, match.t1_p2, roundIndex, matchIndex, 't1_p2', !pairingEditable)}
                 </div></div>
                 <div class="vs">CONTRA</div>
                 <div class="team team-two"><div class="team-pair">
-                    ${buildPlayerSelect(players, match.t2_p1, roundIndex, matchIndex, 't2_p1', !editable)}
-                    ${buildPlayerSelect(players, match.t2_p2, roundIndex, matchIndex, 't2_p2', !editable)}
+                    ${buildPlayerSelect(players, match.t2_p1, roundIndex, matchIndex, 't2_p1', !pairingEditable)}
+                    ${buildPlayerSelect(players, match.t2_p2, roundIndex, matchIndex, 't2_p2', !pairingEditable)}
                 </div></div>
                 <div class="score-row">${scoreControl('score1', 'primer')}<span class="score-sep">—</span>${scoreControl('score2', 'segundo')}</div>
                 ${warning ? `<div class="score-warning">⚠️ ${warning}</div>` : ''}

@@ -1,56 +1,44 @@
 {
   "rules": {
+    ".read": false,
+    ".write": false,
     "tournaments": {
       "$tournamentId": {
-        ".read": "auth != null",
-        "metadata": {
-          ".write": "auth != null && (auth.token.platformRole === 'superAdmin' || (!data.exists() && newData.child('ownerUid').val() === auth.uid && newData.child('admins').child(auth.uid).val() === true))"
+        ".read": false,
+        ".write": false,
+        "public": {
+          ".read": "auth != null && (auth.token.platformRole === 'superAdmin' || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
+          ".write": false
         },
-        "state": {
-          ".write": "auth != null && (auth.token.platformRole === 'superAdmin' || root.child('tournaments').child($tournamentId).child('metadata').child('ownerUid').val() === auth.uid || root.child('tournaments').child($tournamentId).child('metadata').child('admins').child(auth.uid).val() === true)",
-          "schedule": {
-            "$roundId": {
-              "matches": {
-                "$matchId": {
-                  "score1": {
-                    ".write": "auth != null && (auth.token.platformRole === 'superAdmin' || root.child('tournaments').child($tournamentId).child('metadata').child('ownerUid').val() === auth.uid || root.child('tournaments').child($tournamentId).child('metadata').child('admins').child(auth.uid).val() === true || root.child('tournaments').child($tournamentId).child('claims').child(root.child('tournaments').child($tournamentId).child('state').child('schedule').child($roundId).child('matches').child($matchId).child('t1_p1').val()).child('uid').val() === auth.uid || root.child('tournaments').child($tournamentId).child('claims').child(root.child('tournaments').child($tournamentId).child('state').child('schedule').child($roundId).child('matches').child($matchId).child('t1_p2').val()).child('uid').val() === auth.uid || root.child('tournaments').child($tournamentId).child('claims').child(root.child('tournaments').child($tournamentId).child('state').child('schedule').child($roundId).child('matches').child($matchId).child('t2_p1').val()).child('uid').val() === auth.uid || root.child('tournaments').child($tournamentId).child('claims').child(root.child('tournaments').child($tournamentId).child('state').child('schedule').child($roundId).child('matches').child($matchId).child('t2_p2').val()).child('uid').val() === auth.uid)",
-                    ".validate": "newData.val() === '' || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 20)"
-                  },
-                  "score2": {
-                    ".write": "auth != null && (auth.token.platformRole === 'superAdmin' || root.child('tournaments').child($tournamentId).child('metadata').child('ownerUid').val() === auth.uid || root.child('tournaments').child($tournamentId).child('metadata').child('admins').child(auth.uid).val() === true || root.child('tournaments').child($tournamentId).child('claims').child(root.child('tournaments').child($tournamentId).child('state').child('schedule').child($roundId).child('matches').child($matchId).child('t1_p1').val()).child('uid').val() === auth.uid || root.child('tournaments').child($tournamentId).child('claims').child(root.child('tournaments').child($tournamentId).child('state').child('schedule').child($roundId).child('matches').child($matchId).child('t1_p2').val()).child('uid').val() === auth.uid || root.child('tournaments').child($tournamentId).child('claims').child(root.child('tournaments').child($tournamentId).child('state').child('schedule').child($roundId).child('matches').child($matchId).child('t2_p1').val()).child('uid').val() === auth.uid || root.child('tournaments').child($tournamentId).child('claims').child(root.child('tournaments').child($tournamentId).child('state').child('schedule').child($roundId).child('matches').child($matchId).child('t2_p2').val()).child('uid').val() === auth.uid)",
-                    ".validate": "newData.val() === '' || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 20)"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "updatedAt": {
-          ".write": "auth != null && (auth.token.platformRole === 'superAdmin' || root.child('tournaments').child($tournamentId).child('metadata').child('ownerUid').val() === auth.uid || root.child('tournaments').child($tournamentId).child('metadata').child('admins').child(auth.uid).val() === true)"
-        },
-        "claims": {
-          "$playerId": {
-            ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid) && (!newData.exists() || newData.child('uid').val() === auth.uid)",
-            ".validate": "!newData.exists() || (newData.child('uid').val() === auth.uid && newData.child('presenceId').isString())"
-          }
-        },
-        "presence": {
-          "$presenceId": {
-            ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid) && (!newData.exists() || newData.child('uid').val() === auth.uid)",
-            ".validate": "!newData.exists() || newData.child('uid').val() === auth.uid"
-          }
-        },
-        "history": {
-          "$entryId": {
-            ".write": "auth != null && (auth.token.platformRole === 'superAdmin' || root.child('tournaments').child($tournamentId).child('metadata').child('ownerUid').val() === auth.uid || root.child('tournaments').child($tournamentId).child('metadata').child('admins').child(auth.uid).val() === true)"
-          }
+        "_server": {
+          ".read": false,
+          ".write": false
         }
       }
+    },
+    "tournamentAccess": {
+      "$tournamentId": {
+        ".read": false,
+        ".write": false
+      }
+    },
+    "tournamentPresence": {
+      "$tournamentId": {
+        ".read": "auth != null && (auth.token.platformRole === 'superAdmin' || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid && (auth.token.platformRole === 'superAdmin' || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
+          ".validate": "!newData.exists() || (newData.child('uid').val() === auth.uid && newData.child('updatedAt').exists())"
+        }
+      }
+    },
+    "creationRequests": {
+      ".read": false,
+      ".write": false
     },
     "userProfiles": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || auth.token.platformRole === 'superAdmin')",
-        ".write": "auth != null && auth.token.platformRole === 'superAdmin'"
+        ".write": false
       }
     },
     "adminActivity": {

@@ -61,7 +61,7 @@
             <label for="round-count">Rondas:</label>
             <div class="count-controls">
                 <button class="btn btn-secondary btn-sm" id="round-count-decrease" aria-label="Quitar una ronda">−</button>
-                <input type="number" id="round-count" min="1" max="50" value="9"
+                <input type="number" id="round-count" min="1" max="100" value="9"
                        >
                 <button class="btn btn-secondary btn-sm" id="round-count-increase" aria-label="Agregar una ronda">+</button>
             </div>
@@ -86,7 +86,25 @@
             </div>
             <span class="count-hint">Puntaje objetivo de cada partido</span>
         </div>
+        <fieldset class="pairing-mode-fieldset">
+            <legend>Tipo de parejas</legend>
+            <label class="pairing-mode-option">
+                <input type="radio" name="pairing-mode" value="rotating" checked>
+                <span><strong>Parejas rotativas</strong><small>Los compañeros cambian para lograr la mayor variedad posible.</small></span>
+            </label>
+            <label class="pairing-mode-option">
+                <input type="radio" name="pairing-mode" value="fixed">
+                <span><strong>Parejas fijas</strong><small>Cada equipo se mantiene y rota contra los demás.</small></span>
+            </label>
+            <p class="count-hint" id="pairing-mode-hint"></p>
+        </fieldset>
+        <div class="fixed-teams-editor" id="fixed-teams-editor" hidden>
+            <h3>Equipos fijos</h3>
+            <p>Podés reorganizarlos antes de crear el torneo.</p>
+            <div id="fixed-teams-container"></div>
+        </div>
         <div class="players-grid" id="players-container"></div>
+        <div class="fixture-diagnostic" id="fixture-diagnostic" aria-live="polite"></div>
     </div>
 
     <div class="card">
@@ -156,13 +174,9 @@
         <h2 id="player-change-modal-title">Actualizar fixture</h2>
         <p id="player-change-description"></p>
         <div class="choice-actions">
-            <button class="btn btn-primary" type="button" id="confirm-player-change-future">
-                Desde esta ronda en adelante
-                <span>Intercambia jugadores y descansos en las rondas futuras.</span>
-            </button>
             <button class="btn btn-secondary" type="button" id="confirm-player-change-single">
-                Solo esta ronda
-                <span>Modifica únicamente los partidos de esta ronda.</span>
+                Confirmar cambio
+                <span>Modifica únicamente esta ronda y conserva todo el historial.</span>
             </button>
             <button class="btn btn-secondary" type="button" id="cancel-player-change">Cancelar</button>
         </div>

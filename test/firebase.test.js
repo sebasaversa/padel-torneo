@@ -112,34 +112,41 @@ test('espera la restauración de sesión antes de entrar como invitado', async (
     assert.equal(signedInAnonymously, 0);
 });
 
-test('sincroniza estado remoto y guarda el estado local', async () => {
+test('escucha public v2 y confirma mutaciones tipadas sin escribir state directamente', async () => {
     let stateListener;
-    let savedPayload;
-    const stateRef = {
+    let functionCall;
+    const publicRef = {
         on: (_event, listener) => { stateListener = listener; return listener; },
         off: () => {}
     };
     const tournamentRef = {
-        child: key => key === 'state' ? stateRef : null,
-        update: async payload => { savedPayload = payload; }
+        child: key => key === 'public' ? publicRef : null
     };
     const database = { ref: () => tournamentRef };
     const statuses = [];
     const received = [];
     const sync = createTournamentSync({
         database,
-        serverTimestamp: () => 'timestamp',
-        getState: () => ({ players: ['Ana'] }),
+        callFunction: async (name, data) => {
+            functionCall = { name, data };
+            return { revision: 2 };
+        },
         getStateSignature: state => JSON.stringify(state),
         onRemoteState: (state, meta) => received.push({ state, meta }),
         onStatus: status => statuses.push(status)
     });
 
     sync.connect('abc');
-    stateListener({ val: () => ({ players: ['Beto'] }) });
-    assert.equal(received[0].meta.changedByAnotherDevice, true);
-    await sync.saveNow();
-    assert.deepEqual(savedPayload, { state: { players: ['Ana'] }, updatedAt: 'timestamp' });
+    const publicDocument = { schemaVersion: 2, state: { revision: 1 } };
+    stateListener({ val: () => publicDocument });
+    assert.equal(received[0].meta.changedByAnotherDevice, false);
+    await sync.mutate('renamePlayer', { playerId: 0, name: 'Beto' }, {
+        operationId: '12345678901234567890'
+    });
+    assert.equal(functionCall.name, 'mutateTournamentV2');
+    assert.equal(functionCall.data.expectedRevision, 1);
+    assert.equal(functionCall.data.type, 'renamePlayer');
+    assert.deepEqual(functionCall.data.payload, { playerId: 0, name: 'Beto' });
     assert.ok(statuses.includes('Sincronizado en todos los dispositivos'));
 });
 

@@ -6,8 +6,10 @@ export function decodeState(encoded) {
     return JSON.parse(decodeURIComponent(escape(atob(encoded))));
 }
 
-export function createSharedTournamentUrl(origin, pathname, tournamentId) {
-    return `${origin}${pathname}?torneo=${tournamentId}`;
+export function createSharedTournamentUrl(origin, pathname, tournamentId, invitationToken = '') {
+    const params = new URLSearchParams({ torneo: tournamentId });
+    if (invitationToken) params.set('invitacion', invitationToken);
+    return `${origin}${pathname}?${params}`;
 }
 
 export function createStandaloneShareUrl(origin, pathname, state) {
