@@ -150,6 +150,40 @@ test('escucha public v2 y confirma mutaciones tipadas sin escribir state directa
     assert.ok(statuses.includes('Sincronizado en todos los dispositivos'));
 });
 
+test('la cola avanza la revisión confirmada aunque el listener remoto llegue después', async () => {
+    let stateListener;
+    const calls = [];
+    const publicRef = {
+        on: (_event, listener) => { stateListener = listener; return listener; },
+        off: () => {}
+    };
+    const database = {
+        ref: () => ({ child: key => key === 'public' ? publicRef : null })
+    };
+    const sync = createTournamentSync({
+        database,
+        callFunction: async (_name, data) => {
+            calls.push(data);
+            return { revision: data.expectedRevision + 1 };
+        },
+        getStateSignature: state => JSON.stringify(state),
+        onRemoteState: () => {},
+        onStatus: () => {}
+    });
+
+    sync.connect('abc');
+    stateListener({ val: () => ({ schemaVersion: 2, state: { revision: 7 } }) });
+    const first = sync.mutate('adjustScore', { amount: 1 }, {
+        operationId: '11111111111111111111'
+    });
+    const second = sync.mutate('adjustScore', { amount: 1 }, {
+        operationId: '22222222222222222222'
+    });
+    await Promise.all([first, second]);
+
+    assert.deepEqual(calls.map(call => call.expectedRevision), [7, 8]);
+});
+
 test('registra presencia y reclama un jugador de forma exclusiva', async () => {
     let presenceData;
     let claimData;

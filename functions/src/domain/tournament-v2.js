@@ -18,6 +18,7 @@ import {
 const PLAYER_FIELDS = ['t1_p1', 't1_p2', 't2_p1', 't2_p2'];
 const OPERATION_TYPES = new Set([
     'updateScore',
+    'adjustScore',
     'updateRotatingPairing',
     'renamePlayer',
     'updateGamesPerSet',
@@ -239,6 +240,20 @@ function applyScore(publicDocument, access, request, actor, canManage) {
     match[field] = value;
 }
 
+function applyScoreAdjustment(publicDocument, access, request, actor, canManage) {
+    verifySchedulePreconditions(publicDocument.state, request);
+    const { match, players } = locateMatch(publicDocument.state, request.payload);
+    if (!canManage && !actorPlayerIds(access, actor).some(id => players.includes(id))) {
+        throw domainError('FORBIDDEN', 'Sólo podés cargar resultados de tus propios partidos.');
+    }
+    const { field, amount } = request.payload;
+    if (!['score1', 'score2'].includes(field) || ![-1, 1].includes(amount)) {
+        throw domainError('INVALID_STATE', 'El ajuste de puntaje no es válido.');
+    }
+    const current = match[field] === '' ? 0 : match[field];
+    match[field] = Math.max(0, Math.min(publicDocument.state.gamesPerSet, current + amount));
+}
+
 function applyRotatingPairing(publicDocument, request, canManage) {
     if (!canManage) throw domainError('FORBIDDEN', 'Sólo un administrador puede corregir las parejas.');
     if (publicDocument.configuration.pairingMode !== 'rotating') {
@@ -304,6 +319,9 @@ function applyMutationBody(publicDocument, access, request, actor, preparedFixtu
     switch (request.type) {
     case 'updateScore':
         applyScore(publicDocument, access, request, actor, canManage);
+        break;
+    case 'adjustScore':
+        applyScoreAdjustment(publicDocument, access, request, actor, canManage);
         break;
     case 'updateRotatingPairing':
         applyRotatingPairing(publicDocument, request, canManage);

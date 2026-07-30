@@ -135,6 +135,28 @@ test('dos scores concurrentes contra la misma revisión producen un commit y un 
     }), { code: 'REVISION_CONFLICT' });
 });
 
+test('los ajustes de score encolados se aplican como deltas sin perder pulsaciones', () => {
+    const built = setup();
+    const identity = matchIdentity(built.tournament);
+    let tournament = built.tournament;
+    for (let index = 0; index < 4; index += 1) {
+        const request = mutation(tournament, 'adjustScore', {
+            ...identity,
+            field: 'score1',
+            amount: 1
+        }, `adjustscore0000000000000000000${index}`);
+        tournament = applyTournamentMutation({
+            tournament,
+            access: built.access,
+            request,
+            actor: { uid: 'owner' },
+            timestamp: index + 2
+        }).tournament;
+    }
+    assert.equal(tournament.public.state.schedule[0].matches[0].score1, 4);
+    assert.equal(tournament.public.state.revision, 4);
+});
+
 test('un score obsoleto falla por fingerprint, IDs y firma de jugadores', () => {
     const built = setup();
     const identity = matchIdentity(built.tournament);

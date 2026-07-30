@@ -2082,6 +2082,30 @@ import { createAppController } from './app/app-controller.js';
     function adjustScore(roundIdx, matchIdx, team, amount) {
         const current = tournamentState.value.schedule[roundIdx].matches[matchIdx][team];
         const next = getAdjustedScore(current, amount, tournamentState.value.gamesPerSet);
+        if (tournamentId) {
+            if (next === current) return;
+            const round = tournamentState.value.schedule[roundIdx];
+            const match = round.matches[matchIdx];
+            tournamentSync?.mutate('adjustScore', {
+                expectedScheduleRevision: tournamentState.value.scheduleRevision,
+                expectedScheduleFingerprint: tournamentState.value.scheduleFingerprint,
+                roundId: round.id,
+                matchId: match.id,
+                expectedPlayerIds: [
+                    match.t1_p1,
+                    match.t1_p2,
+                    match.t2_p1,
+                    match.t2_p2
+                ],
+                field: team,
+                amount
+            }).catch(error => {
+                console.error(error);
+                showToast(error.message || 'No se pudo ajustar el resultado.');
+                renderRounds();
+            });
+            return;
+        }
         updateScore(roundIdx, matchIdx, team, next);
     }
 

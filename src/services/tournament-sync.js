@@ -68,6 +68,22 @@ export function createTournamentSync({
                     type,
                     payload
                 }, { allowAnonymous: true });
+                if (Number.isSafeInteger(result?.revision)
+                    && result.revision >= confirmedPublic.state.revision) {
+                    confirmedPublic = {
+                        ...confirmedPublic,
+                        state: {
+                            ...confirmedPublic.state,
+                            revision: result.revision,
+                            scheduleRevision: Number.isSafeInteger(result.scheduleRevision)
+                                ? result.scheduleRevision
+                                : confirmedPublic.state.scheduleRevision,
+                            scheduleFingerprint: typeof result.scheduleFingerprint === 'string'
+                                ? result.scheduleFingerprint
+                                : confirmedPublic.state.scheduleFingerprint
+                        }
+                    };
+                }
                 onStatus('Cambio confirmado');
                 return result;
             } catch (error) {
