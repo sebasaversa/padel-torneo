@@ -44,12 +44,11 @@ async function signUp(email, password) {
 }
 
 async function call(name, token, data, { expectError = false } = {}) {
+    const headers = { 'content-type': 'application/json' };
+    if (token) headers.authorization = `Bearer ${token}`;
     const response = await fetch(`${functionsOrigin}/${name}`, {
         method: 'POST',
-        headers: {
-            authorization: `Bearer ${token}`,
-            'content-type': 'application/json'
-        },
+        headers,
         body: JSON.stringify({ data })
     });
     const body = await response.json();
@@ -83,8 +82,37 @@ test('smoke v2: creación, roles, score, extensión y barreras directas', {
     const ownerRecord = await getAuth().createUser({ email, password });
     await getAuth().setCustomUserClaims(ownerRecord.uid, { platformRole: 'admin' });
     const owner = await signIn(email, password);
-    const participant = await signUp('player@example.test', password);
-    const outsider = await signUp('outsider@example.test', password);
+    const emailRegistration = await call('registerUserV2', null, {
+        identifier: 'outsider@example.test',
+        password
+    });
+    assert.equal(emailRegistration.accountType, 'email');
+    assert.equal(typeof emailRegistration.customToken, 'string');
+    const outsider = await signIn('outsider@example.test', password);
+
+    const usernameRegistration = await call('registerUserV2', null, {
+        identifier: 'Jugador.Uno',
+        password
+    });
+    assert.equal(usernameRegistration.accountType, 'username');
+    assert.equal(usernameRegistration.displayName, 'jugador.uno');
+    assert.equal(typeof usernameRegistration.customToken, 'string');
+    const resolvedUsername = await call('resolveUsernameLoginV2', null, {
+        username: 'JUGADOR.UNO'
+    });
+    assert.match(resolvedUsername.authEmail, /@users\.padel-torneo\.invalid$/);
+    const participant = await signIn(resolvedUsername.authEmail, password);
+    const participantProfile = (await getDatabase()
+        .ref(`userProfiles/${participant.localId}`).get()).val();
+    assert.equal(participantProfile.accountType, 'username');
+    assert.equal(participantProfile.username, 'jugador.uno');
+    assert.equal(participantProfile.role, 'user');
+    assert.equal(participantProfile.email, undefined);
+    const duplicateUsername = await call('registerUserV2', null, {
+        identifier: 'jugador.uno',
+        password
+    }, { expectError: true });
+    assert.equal(duplicateUsername.status, 'ALREADY_EXISTS');
 
     const created = await call('createTournamentV2', owner.idToken, {
         creationRequestId: '0123456789abcdef0123456789abcdef',

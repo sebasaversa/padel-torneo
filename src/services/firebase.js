@@ -44,18 +44,26 @@ export function createFirebaseClient({ firebase, config, fetchFn = globalThis.fe
         getAuth,
         async callFunction(name, data = null, { allowAnonymous = false } = {}) {
             const auth = getAuth();
-            if (!auth.currentUser || (auth.currentUser.isAnonymous && !allowAnonymous)) throw new Error('Necesitás iniciar sesión para continuar.');
-            const token = await auth.currentUser.getIdToken();
+            if ((!auth.currentUser || auth.currentUser.isAnonymous) && !allowAnonymous) {
+                throw new Error('Necesitás iniciar sesión para continuar.');
+            }
+            const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) headers.Authorization = `Bearer ${token}`;
             const response = await fetchFn(`https://us-central1-${config.projectId}.cloudfunctions.net/${name}`, {
                 method: 'POST',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
+                headers,
                 body: JSON.stringify({ data })
             });
             const payload = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(payload.error?.message || 'No se pudo completar la operación.');
+            if (!response.ok) {
+                const error = new Error(payload.error?.message || 'No se pudo completar la operación.');
+                if (payload.error?.status) {
+                    error.code = `functions/${payload.error.status.toLowerCase().replaceAll('_', '-')}`;
+                }
+                error.details = payload.error?.details;
+                throw error;
+            }
             // Las callable Functions de Firebase usan el campo `result` en
             // su protocolo HTTP. Conservamos `data` para compatibilidad con
             // respuestas anteriores y pruebas ya existentes.

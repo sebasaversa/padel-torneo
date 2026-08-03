@@ -32,10 +32,12 @@ Un link con `?torneo=<id>` es un torneo compartido en Firebase. Un link con `#s=
 
 - **Super admin:** inicia con Google, administra cuentas de admins, ve todos los torneos y puede recuperar los eliminados.
 - **Admin:** inicia con email y contraseña; crea sus torneos y administra la configuración completa de los que creó o le asignaron.
+- **Usuario:** puede crear una cuenta con email o con un username, siempre con contraseña, y usarla para unirse a torneos sin recibir permisos administrativos.
 - **Participante:** entra por invitación, elige su jugador y sólo puede cambiar su nombre o cargar resultados en los partidos que juega.
 - **Espectador:** entra por link sin elegir jugador y consulta el torneo en modo lectura.
 
 Las operaciones de participantes se validan en Cloud Functions y las reglas de Realtime Database bloquean las escrituras directas no autorizadas.
+La recuperación por email está disponible para las cuentas creadas con email. Las cuentas creadas sólo con username no tienen recuperación por email.
 
 ## Desarrollo local
 
@@ -71,7 +73,7 @@ npm run preview
 La build se genera en `dist/`. No se debe abrir `index.html` directamente: Vite resuelve los módulos y assets durante desarrollo y build.
 
 `npm run test:rules` prueba las barreras de lectura y escritura directa.
-`npm run test:functions-emulator` levanta Auth, Realtime Database y Functions para un smoke integrado de creación idempotente, invitación, claim, score y extensión.
+`npm run test:functions-emulator` levanta Auth, Realtime Database y Functions para un smoke integrado de alta por email/username, creación idempotente, invitación, claim, score y extensión.
 
 ## Arquitectura
 
@@ -111,11 +113,17 @@ tournamentAccess/{tournamentId}/
 
 tournamentPresence/{tournamentId}/{uid}
                         Presencia efímera por usuario
+
+usernameDirectory/{usernameHash}
+                        Resolución privada de usernames, accesible sólo desde Functions
+
+userProfiles/{uid}
+                        Perfil y tipo de cuenta, sin contraseñas
 ```
 
 La configuración pública del proyecto Firebase vive en `src/app.js`; las credenciales de cliente no son secretas. La protección real depende de Authentication, Rules con denegación por defecto y Functions autoritativas. Ni owner, admin ni superadmin pueden escribir directamente configuración, fixture o scores.
 
-Los nombres de jugadores, resultados, historial e información genérica del navegador (por ejemplo, plataforma y navegador) se almacenan en el torneo compartido. No se registra nombre real del dispositivo ni información de cuenta.
+Los nombres de jugadores, resultados, historial e información genérica del navegador (por ejemplo, plataforma y navegador) se almacenan en el torneo compartido. Para las cuentas se guarda el email o username elegido y un perfil de rol. Las contraseñas permanecen exclusivamente en Firebase Authentication. Las cuentas con username usan un email técnico aleatorio, privado y nunca visible en la interfaz.
 
 ### Recuperación operativa
 

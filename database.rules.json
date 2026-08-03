@@ -35,6 +35,10 @@
       ".read": false,
       ".write": false
     },
+    "usernameDirectory": {
+      ".read": false,
+      ".write": false
+    },
     "userProfiles": {
       "$uid": {
         ".read": "auth != null && (auth.uid === $uid || auth.token.platformRole === 'superAdmin')",

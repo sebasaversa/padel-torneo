@@ -9,6 +9,15 @@ import {
     normalizeAdminUpdate,
     serializeUserRecord
 } from './admin-users.js';
+import {
+    buildInternalUsernameEmail,
+    buildMissingUsernameEmail,
+    buildUserProfile,
+    canReserveUsername,
+    normalizeAccountRegistration,
+    normalizeUsername,
+    usernameDirectoryKey
+} from './user-accounts.js';
 import { getSuperAdminAuthorization, isAdminAccount } from './authorization.js';
 import { buildTournamentDeletion, requireTournamentId } from './tournament-admin.js';
 import { buildTournamentCatalogPayload, getTournamentCatalogAuthorization } from './tournament-catalog.js';
@@ -83,9 +92,164 @@ async function saveAdminProfile(uid, user, currentProfile = {}) {
     }));
 }
 
+function asRegistrationHttpsError(error) {
+    if (error instanceof HttpsError) return error;
+    if (error?.code === 'auth/email-already-exists') {
+        return new HttpsError('already-exists', 'Ya existe una cuenta con ese email.');
+    }
+    if (error?.code === 'auth/invalid-password') {
+        return new HttpsError('invalid-argument', 'La contraseña no cumple los requisitos.');
+    }
+    if (error?.code === 'auth/invalid-email') {
+        return new HttpsError('invalid-argument', 'El email no es válido.');
+    }
+    console.error('Unexpected user registration failure', {
+        code: error?.code || null,
+        message: error?.message || String(error)
+    });
+    return new HttpsError('internal', 'No se pudo crear la cuenta. Intentá nuevamente.');
+}
+
+async function saveRegularUserProfile(uid, account) {
+    const profileRef = getDatabase().ref(`userProfiles/${uid}`);
+    await profileRef.transaction(current => ({
+        ...buildUserProfile(account, current || {}),
+        createdAt: current?.createdAt || ServerValue.TIMESTAMP,
+        updatedAt: ServerValue.TIMESTAMP
+    }));
+}
+
+async function releaseUsernameReservation(ref, registrationId, uid = null) {
+    await ref.transaction(current => {
+        // Returning undefined would abort from an initially empty local cache
+        // before the server can provide the existing reservation. Committing
+        // null is a safe no-op when the server is truly empty and forces the
+        // normal transaction retry when it is not.
+        if (!current) return null;
+        const belongsToAttempt = current?.registrationId === registrationId
+            && current?.status === 'reserved';
+        const belongsToCreatedUser = Boolean(uid) && current?.uid === uid;
+        return belongsToAttempt || belongsToCreatedUser ? null : current;
+    });
+}
+
 // Punto de comprobación sin privilegios para verificar el despliegue.
 export const healthcheck = onRequest({ cors: false }, (_request, response) => {
     response.status(200).json({ status: 'ok' });
+});
+
+export const registerUserV2 = onCall({ secrets: [superAdminEmail] }, async request => {
+    let account;
+    try {
+        account = normalizeAccountRegistration(request.data);
+    } catch (error) {
+        throw new HttpsError('invalid-argument', error.message);
+    }
+    if (account.accountType === 'email'
+        && isConfiguredSuperAdmin({ email: account.email }, superAdminEmail.value())) {
+        throw new HttpsError('permission-denied', 'Ese email no está disponible para un alta pública.');
+    }
+
+    const auth = getAuth();
+    if (account.accountType === 'email') {
+        let user;
+        try {
+            user = await auth.createUser({
+                email: account.email,
+                password: account.password,
+                displayName: account.displayName
+            });
+            await saveRegularUserProfile(user.uid, account);
+            return {
+                customToken: await auth.createCustomToken(user.uid),
+                accountType: account.accountType,
+                displayName: account.displayName
+            };
+        } catch (error) {
+            if (user?.uid) {
+                await Promise.all([
+                    auth.deleteUser(user.uid).catch(() => {}),
+                    getDatabase().ref(`userProfiles/${user.uid}`).remove().catch(() => {})
+                ]);
+            }
+            throw asRegistrationHttpsError(error);
+        }
+    }
+
+    const database = getDatabase();
+    const registrationId = createOpaqueToken();
+    const directoryRef = database.ref(`usernameDirectory/${usernameDirectoryKey(account.username)}`);
+    const reservation = await directoryRef.transaction(current =>
+        canReserveUsername(current) ? {
+            username: account.username,
+            registrationId,
+            status: 'reserved',
+            createdAt: ServerValue.TIMESTAMP
+        } : current);
+    if (!reservation.committed || reservation.snapshot.val()?.registrationId !== registrationId) {
+        throw new HttpsError('already-exists', 'Ese usuario ya está en uso.');
+    }
+
+    let user;
+    try {
+        const authEmail = buildInternalUsernameEmail(createOpaqueToken());
+        user = await auth.createUser({
+            email: authEmail,
+            password: account.password,
+            displayName: account.displayName
+        });
+        const activation = await directoryRef.transaction(current => {
+            // See releaseUsernameReservation: null must be committed as a
+            // harmless no-op so the transaction reaches the server value.
+            if (!current) return null;
+            if (current?.registrationId !== registrationId || current?.status !== 'reserved') return;
+            return {
+                username: account.username,
+                uid: user.uid,
+                authEmail,
+                status: 'active',
+                createdAt: current.createdAt || ServerValue.TIMESTAMP,
+                updatedAt: ServerValue.TIMESTAMP
+            };
+        });
+        const activatedEntry = activation.snapshot.val();
+        if (!activation.committed || activatedEntry?.uid !== user.uid
+            || activatedEntry?.status !== 'active') {
+            throw new Error('No se pudo activar el usuario.');
+        }
+        await saveRegularUserProfile(user.uid, account);
+        return {
+            customToken: await auth.createCustomToken(user.uid),
+            accountType: account.accountType,
+            displayName: account.displayName
+        };
+    } catch (error) {
+        if (user?.uid) {
+            await Promise.all([
+                auth.deleteUser(user.uid).catch(() => {}),
+                database.ref(`userProfiles/${user.uid}`).remove().catch(() => {})
+            ]);
+        }
+        await releaseUsernameReservation(directoryRef, registrationId, user?.uid).catch(() => {});
+        throw asRegistrationHttpsError(error);
+    }
+});
+
+export const resolveUsernameLoginV2 = onCall(async request => {
+    let username;
+    try {
+        username = normalizeUsername(request.data?.username);
+    } catch (error) {
+        throw new HttpsError('invalid-argument', error.message);
+    }
+    const entry = (await getDatabase()
+        .ref(`usernameDirectory/${usernameDirectoryKey(username)}`)
+        .get()).val();
+    return {
+        authEmail: entry?.status === 'active' && entry?.username === username && typeof entry?.authEmail === 'string'
+            ? entry.authEmail
+            : buildMissingUsernameEmail(username)
+    };
 });
 
 export const createTournamentV2 = onCall(async request => {

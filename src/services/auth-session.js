@@ -13,6 +13,9 @@ export function createAuthSession({ firebase, auth }) {
         currentUser() {
             return toSessionUser(auth.currentUser);
         },
+        isGoogleUser() {
+            return auth.currentUser?.providerData?.some(provider => provider.providerId === 'google.com') === true;
+        },
         subscribe(listener) {
             return auth.onAuthStateChanged(user => listener(toSessionUser(user)));
         },
@@ -23,6 +26,10 @@ export function createAuthSession({ firebase, auth }) {
         },
         async signInWithEmailAndPassword(email, password) {
             const result = await auth.signInWithEmailAndPassword(email.trim(), password);
+            return toSessionUser(result.user);
+        },
+        async signInWithCustomToken(token) {
+            const result = await auth.signInWithCustomToken(token);
             return toSessionUser(result.user);
         },
         sendPasswordReset(email) {

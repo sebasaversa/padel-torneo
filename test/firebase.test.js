@@ -66,6 +66,25 @@ test('lee el campo result del protocolo callable de Firebase', async () => {
     assert.deepEqual(await client.callFunction('listTournamentCatalog'), { tournaments: { torneo: {} } });
 });
 
+test('conserva código y mensaje de errores callable', async () => {
+    const auth = { currentUser: { isAnonymous: true, getIdToken: async () => 'token-invitado' } };
+    const client = createFirebaseClient({
+        firebase: {
+            apps: [{}], auth: () => auth,
+            database: Object.assign(() => ({}), { ServerValue: { TIMESTAMP: 'timestamp' } })
+        },
+        config: { projectId: 'padel-test' },
+        fetchFn: async () => ({
+            ok: false,
+            json: async () => ({ error: { status: 'ALREADY_EXISTS', message: 'Ese usuario ya está en uso.' } })
+        })
+    });
+    await assert.rejects(
+        client.callFunction('registerUserV2', {}, { allowAnonymous: true }),
+        error => error.code === 'functions/already-exists' && error.message === 'Ese usuario ya está en uso.'
+    );
+});
+
 test('mantiene una sesión existente en lugar de reemplazarla por una anónima', async () => {
     let signedInAnonymously = 0;
     const signedInUser = { uid: 'admin-1' };

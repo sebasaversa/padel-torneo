@@ -20,6 +20,9 @@ export function bindStaticUIEvents(actions) {
     click('sign-in-google-button', actions.signInWithGoogle);
     click('sign-in-email-button', actions.signInWithEmailAndPassword);
     click('reset-password-button', actions.sendPasswordReset);
+    click('show-registration-button', actions.showRegistrationMode);
+    click('show-login-button', actions.showLoginMode);
+    click('register-user-button', actions.registerUser);
     click('close-auth-modal', actions.closeAuthModal);
     click('home-button', actions.goHome);
     click('share-button', actions.shareState);
@@ -109,7 +112,15 @@ export function bindStaticUIEvents(actions) {
         if (event.key === 'Escape') actions.cancelTournamentName();
     });
     document.getElementById('auth-password-input')?.addEventListener('keydown', event => {
-        if (event.key === 'Enter') actions.signInWithEmailAndPassword();
+        if (event.key !== 'Enter') return;
+        if (document.getElementById('auth-registration-fields')?.hidden) {
+            actions.signInWithEmailAndPassword();
+        } else {
+            document.getElementById('auth-password-confirm-input')?.focus();
+        }
+    });
+    document.getElementById('auth-password-confirm-input')?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') actions.registerUser();
     });
     document.getElementById('admin-user-form')?.addEventListener('submit', event => {
         event.preventDefault();

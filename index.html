@@ -225,17 +225,27 @@
     </div>
 </div>
 <div class="modal" id="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" hidden>
-    <div class="modal-card">
+    <div class="modal-card auth-modal-card">
         <h2 id="auth-modal-title">Iniciar sesión</h2>
-        <p>Los administradores ingresan con su cuenta. Para mirar o jugar desde un link no necesitás iniciar sesión.</p>
+        <p id="auth-modal-description">Ingresá con tu cuenta. También podés mirar o jugar desde un link sin iniciar sesión.</p>
         <button class="btn btn-secondary auth-google-button" id="sign-in-google-button" type="button">G Continuar con Google</button>
-        <div class="auth-divider"><span>o con email y contraseña</span></div>
-        <label for="auth-email-input">Email</label>
-        <input type="email" id="auth-email-input" autocomplete="email" inputmode="email" placeholder="admin@ejemplo.com">
+        <div class="auth-divider"><span>o con email/usuario y contraseña</span></div>
+        <label for="auth-email-input">Email o usuario</label>
+        <input type="text" id="auth-email-input" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="jugador_1 o persona@ejemplo.com">
         <label for="auth-password-input">Contraseña</label>
         <input type="password" id="auth-password-input" autocomplete="current-password" placeholder="Tu contraseña">
-        <button class="btn btn-primary auth-email-button" id="sign-in-email-button" type="button">Iniciar sesión</button>
-        <button class="btn btn-secondary auth-reset-button" id="reset-password-button" type="button">Olvidé mi contraseña</button>
+        <div id="auth-login-actions">
+            <button class="btn btn-primary auth-email-button" id="sign-in-email-button" type="button">Iniciar sesión</button>
+            <button class="btn btn-secondary auth-reset-button" id="reset-password-button" type="button">Olvidé mi contraseña</button>
+            <button class="btn btn-secondary auth-account-button" id="show-registration-button" type="button">Crear una cuenta</button>
+        </div>
+        <div id="auth-registration-fields" hidden>
+            <label for="auth-password-confirm-input">Repetir contraseña</label>
+            <input type="password" id="auth-password-confirm-input" autocomplete="new-password" placeholder="Repetí tu contraseña">
+            <p class="auth-help">La contraseña debe tener al menos 8 caracteres, con letras y un número. El usuario admite letras, números, punto, guion y guion bajo. Si elegís usuario sin email, no hay recuperación por correo.</p>
+            <button class="btn btn-primary auth-email-button" id="register-user-button" type="button">Crear cuenta</button>
+            <button class="btn btn-secondary auth-account-button" id="show-login-button" type="button">Ya tengo una cuenta</button>
+        </div>
         <div class="modal-actions">
             <button class="btn btn-secondary" type="button" id="close-auth-modal">Cancelar</button>
         </div>

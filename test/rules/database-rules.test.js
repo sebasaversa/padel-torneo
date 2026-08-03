@@ -40,6 +40,14 @@ async function seed() {
                     claims: { 0: { uid: 'player' } },
                     invitationHashes: { secreto: { role: 'participant' } }
                 }
+            },
+            usernameDirectory: {
+                hashprivado: {
+                    username: 'jugador',
+                    uid: 'player',
+                    authEmail: 'interno@privado.invalid',
+                    status: 'active'
+                }
             }
         });
     });
@@ -95,6 +103,18 @@ test('acceso, claims, invitaciones y recibos son privados y write-only del servi
     await assertFails(database.ref(`tournamentAccess/${tournamentId}/claims/0`).remove());
     await assertFails(database.ref(`tournamentAccess/${tournamentId}/invitationHashes`).set({}));
     await assertFails(database.ref('creationRequests/owner').once('value'));
+});
+
+test('el directorio interno de usernames nunca es accesible desde el cliente', async () => {
+    await seed();
+    for (const [uid, claims] of [
+        ['player', {}],
+        ['super', { platformRole: 'superAdmin' }]
+    ]) {
+        const database = testEnv.authenticatedContext(uid, claims).database();
+        await assertFails(database.ref('usernameDirectory/hashprivado').once('value'));
+        await assertFails(database.ref('usernameDirectory/hashprivado').set({ authEmail: 'alterado' }));
+    }
 });
 
 test('presencia efímera permite sólo el nodo propio de un miembro', async () => {

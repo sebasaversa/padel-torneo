@@ -27,6 +27,10 @@ import { getBestStreak, getLeaderboardStats, getProgress } from './features/scor
 import { buildTournamentSummaryText } from './features/scoring/summary.js';
 import { createFirebaseClient } from './services/firebase.js';
 import { createAuthSession } from './services/auth-session.js';
+import {
+    normalizeLoginIdentifier,
+    validateRegistrationInput
+} from './services/user-accounts.js';
 import { createAdminUserApi } from './services/admin-user-api.js';
 import { createTournamentSync } from './services/tournament-sync.js';
 import { formatPresenceRole, summarizePresence } from './services/presence.js';
@@ -309,7 +313,10 @@ import { createAppController } from './app/app-controller.js';
     }
 
     async function bootstrapSuperAdmin() {
-        if (!sessionUser || sessionUser.isAnonymous || sessionRole === 'superAdmin') return sessionRole === 'superAdmin';
+        if (!sessionUser || sessionUser.isAnonymous || !authSession.isGoogleUser()
+            || sessionRole === 'superAdmin') {
+            return sessionRole === 'superAdmin';
+        }
         if (bootstrapAttemptUid === sessionUser.uid && bootstrapAttemptPromise) return bootstrapAttemptPromise;
         bootstrapAttemptUid = sessionUser.uid;
         bootstrapAttemptPromise = (async () => {
@@ -325,9 +332,34 @@ import { createAppController } from './app/app-controller.js';
         return bootstrapAttemptPromise;
     }
 
+    function setAuthMode(mode) {
+        const registering = mode === 'register';
+        document.getElementById('auth-modal-title').textContent = registering ? 'Crear una cuenta' : 'Iniciar sesión';
+        document.getElementById('auth-modal-description').textContent = registering
+            ? 'Elegí un email o un nombre de usuario y protegé tu cuenta con contraseña.'
+            : 'Ingresá con tu cuenta. También podés mirar o jugar desde un link sin iniciar sesión.';
+        document.getElementById('auth-login-actions').hidden = registering;
+        document.getElementById('auth-registration-fields').hidden = !registering;
+        document.getElementById('auth-password-input').autocomplete = registering
+            ? 'new-password'
+            : 'current-password';
+        document.getElementById('auth-password-confirm-input').value = '';
+    }
+
+    function showRegistrationMode() {
+        setAuthMode('register');
+        document.getElementById('auth-email-input').focus();
+    }
+
+    function showLoginMode() {
+        setAuthMode('login');
+        document.getElementById('auth-email-input').focus();
+    }
+
     function openAuthModal() {
         document.getElementById('auth-email-input').value = '';
         document.getElementById('auth-password-input').value = '';
+        setAuthMode('login');
         setModalOpen('auth-modal', true);
         setTimeout(() => document.getElementById('auth-email-input').focus(), 0);
     }
@@ -653,8 +685,12 @@ import { createAppController } from './app/app-controller.js';
 
     function getAuthErrorMessage(error) {
         if (error?.code === 'auth/popup-closed-by-user') return 'Se canceló el inicio de sesión.';
-        if (error?.code === 'auth/invalid-credential' || error?.code === 'auth/wrong-password') return 'El email o la contraseña no son correctos.';
+        if (error?.code === 'auth/invalid-credential' || error?.code === 'auth/wrong-password'
+            || error?.code === 'auth/user-not-found') {
+            return 'El email/usuario o la contraseña no son correctos.';
+        }
         if (error?.code === 'auth/too-many-requests') return 'Demasiados intentos. Probá de nuevo más tarde.';
+        if (error?.code?.startsWith('functions/') && error?.message) return error.message;
         return 'No se pudo iniciar sesión. Revisá tus datos e intentá nuevamente.';
     }
 
@@ -672,13 +708,19 @@ import { createAppController } from './app/app-controller.js';
     }
 
     async function signInWithEmailAndPassword() {
-        const email = document.getElementById('auth-email-input').value;
+        const identifierValue = document.getElementById('auth-email-input').value;
         const password = document.getElementById('auth-password-input').value;
-        if (!email || !password) {
-            showToast('Ingresá email y contraseña.');
+        if (!identifierValue || !password) {
+            showToast('Ingresá tu email/usuario y contraseña.');
             return;
         }
         try {
+            const identifier = normalizeLoginIdentifier(identifierValue);
+            const email = identifier.accountType === 'username'
+                ? (await firebaseClient.callFunction('resolveUsernameLoginV2', {
+                    username: identifier.identifier
+                }, { allowAnonymous: true })).authEmail
+                : identifier.identifier;
             const user = await authSession.signInWithEmailAndPassword(email, password);
             await refreshSessionRole();
             closeAuthModal();
@@ -688,14 +730,35 @@ import { createAppController } from './app/app-controller.js';
         }
     }
 
-    async function sendPasswordReset() {
-        const email = document.getElementById('auth-email-input').value;
-        if (!email) {
-            showToast('Ingresá tu email para recuperar el acceso.');
-            return;
-        }
+    async function registerUser() {
         try {
-            await authSession.sendPasswordReset(email);
+            const registration = validateRegistrationInput({
+                identifier: document.getElementById('auth-email-input').value,
+                password: document.getElementById('auth-password-input').value,
+                confirmation: document.getElementById('auth-password-confirm-input').value
+            });
+            const result = await firebaseClient.callFunction('registerUserV2', {
+                identifier: registration.identifier,
+                password: registration.password
+            }, { allowAnonymous: true });
+            const user = await authSession.signInWithCustomToken(result.customToken);
+            sessionRole = null;
+            await refreshSessionRole();
+            closeAuthModal();
+            showToast(`Cuenta creada: ${user.displayName}`);
+        } catch (error) {
+            showToast(error?.message || getAuthErrorMessage(error));
+        }
+    }
+
+    async function sendPasswordReset() {
+        try {
+            const identifier = normalizeLoginIdentifier(document.getElementById('auth-email-input').value);
+            if (identifier.accountType === 'username') {
+                showToast('Las cuentas con usuario no tienen recuperación por email.');
+                return;
+            }
+            await authSession.sendPasswordReset(identifier.identifier);
             showToast('Te enviamos un email para restablecer la contraseña.');
         } catch (error) {
             showToast(getAuthErrorMessage(error));
@@ -762,7 +825,7 @@ import { createAppController } from './app/app-controller.js';
         if (tournamentId) return;
         // El catálogo completo está protegido en Firebase: los invitados no
         // deben intentar leerlo ni generar un permission_denied en consola.
-        if (!sessionUser || sessionUser.isAnonymous) {
+        if (!sessionUser || sessionUser.isAnonymous || !['admin', 'superAdmin'].includes(sessionRole)) {
             sharedTournamentCatalog = [];
             renderPreviousTournaments();
             return;
@@ -2263,10 +2326,10 @@ import { createAppController } from './app/app-controller.js';
     confirmIdentitySelection, confirmPlayerChange, confirmTournamentName,
     continueIdentitySelection, copyTournamentSummary, createSharedTournament,
     enterAsSpectator, exportJSON, goHome, importJSON, openActivityModal, openAuthModal, openPreviousTournament, openSummaryModal,
-    resetAll, resetSchedule, sendPasswordReset, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
+    registerUser, resetAll, resetSchedule, sendPasswordReset, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
     setPairingMode, setFixedTeamPlayer,
     shareState, shareTournamentSummary, showIdentityChoice, showMainPage, showTournamentHistory, signInWithEmailAndPassword,
-    signInWithGoogle, signOut, closeAuthModal, undoLastChange,
+    showLoginMode, showRegistrationMode, signInWithGoogle, signOut, closeAuthModal, undoLastChange,
     openUsersModal, closeUsersModal, createAdminUser, deleteAdminUser,
     startAdminEdit, cancelAdminEdit, toggleAdminUser, generateAdminPasswordResetLink,
     openTournamentAdminModal, closeTournamentAdminModal, setTournamentAdmin
