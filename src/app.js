@@ -2133,7 +2133,7 @@ import { createAppController } from './app/app-controller.js';
         tournamentState.value.schedule[roundIdx].matches[matchIdx][team] = nextScore;
         saveLocal();
         const match = tournamentState.value.schedule[roundIdx].matches[matchIdx];
-        if (isMatchDone(match)) {
+        if (isMatchDone(match, tournamentState.value.gamesPerSet)) {
             logActivity(`cargó el resultado ${match.score1}–${match.score2} de ${tournamentState.value.players[match.t1_p1]} / ${tournamentState.value.players[match.t1_p2]} vs ${tournamentState.value.players[match.t2_p1]} / ${tournamentState.value.players[match.t2_p2]}`);
         }
         calculateStats();
@@ -2212,7 +2212,7 @@ import { createAppController } from './app/app-controller.js';
     }
 
     function calculateStats() {
-        const stats = getLeaderboardStats(tournamentState.value.players, tournamentState.value.schedule);
+        const stats = getLeaderboardStats(tournamentState.value.players, tournamentState.value.schedule, tournamentState.value.gamesPerSet);
 
         renderLeaderboard(document.getElementById('leaderboard-body'), stats);
     }
@@ -2230,14 +2230,15 @@ import { createAppController } from './app/app-controller.js';
             players: tournamentState.value.players,
             schedule: tournamentState.value.schedule,
             title,
-            date
+            date,
+            gamesPerSet: tournamentState.value.gamesPerSet
         });
     }
 
     function openSummaryModal() {
-        const stats = getLeaderboardStats(tournamentState.value.players, tournamentState.value.schedule);
-        const streak = getBestStreak(tournamentState.value.players, tournamentState.value.schedule);
-        const progress = getProgress(tournamentState.value.schedule);
+        const stats = getLeaderboardStats(tournamentState.value.players, tournamentState.value.schedule, tournamentState.value.gamesPerSet);
+        const streak = getBestStreak(tournamentState.value.players, tournamentState.value.schedule, tournamentState.value.gamesPerSet);
+        const progress = getProgress(tournamentState.value.schedule, tournamentState.value.gamesPerSet);
         const leader = stats[0];
         const positions = stats.slice(0, 3).map((player, index) =>
             `<li>${['🥇', '🥈', '🥉'][index]} <strong>${escapeHTML(player.name)}</strong> · ${player.v}V, ${player.d}D, Dif ${player.dif >= 0 ? '+' : ''}${player.dif}</li>`
@@ -2270,7 +2271,7 @@ import { createAppController } from './app/app-controller.js';
     }
 
     function updateProgress() {
-        const progress = getProgress(tournamentState.value.schedule);
+        const progress = getProgress(tournamentState.value.schedule, tournamentState.value.gamesPerSet);
         document.getElementById('progress-fill').style.width = progress.percentage + '%';
         document.getElementById('progress-text').textContent =
             `${progress.completed} de ${progress.total} partidos anotados (${progress.percentage}%)`;

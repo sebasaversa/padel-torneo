@@ -1,15 +1,15 @@
-import { isMatchDone } from './validation.js';
+import { getCompletedScore, isMatchDone } from './validation.js';
 
-export function getLeaderboardStats(players, schedule) {
+export function getLeaderboardStats(players, schedule, gamesPerSet) {
     const stats = players.map((name, id) => ({
         id, name, v: 0, d: 0, gf: 0, gc: 0, dif: 0, played: 0
     }));
 
     schedule.forEach(round => {
         round.matches.forEach(match => {
-            if (!isMatchDone(match)) return;
-            const score1 = parseInt(match.score1, 10);
-            const score2 = parseInt(match.score2, 10);
+            const score = getCompletedScore(match, gamesPerSet);
+            if (!score) return;
+            const [score1, score2] = score;
             const team1 = [match.t1_p1, match.t1_p2];
             const team2 = [match.t2_p1, match.t2_p2];
 
@@ -40,13 +40,13 @@ export function getLeaderboardStats(players, schedule) {
     });
 }
 
-export function getBestStreak(players, schedule) {
+export function getBestStreak(players, schedule, gamesPerSet) {
     const current = Array(players.length).fill(0);
     const best = Array(players.length).fill(0);
     schedule.forEach(round => round.matches.forEach(match => {
-        if (!isMatchDone(match)) return;
-        const score1 = parseInt(match.score1, 10);
-        const score2 = parseInt(match.score2, 10);
+        const score = getCompletedScore(match, gamesPerSet);
+        if (!score) return;
+        const [score1, score2] = score;
         const team1 = [match.t1_p1, match.t1_p2];
         const team2 = [match.t2_p1, match.t2_p2];
         if (score1 === score2) {
@@ -68,9 +68,9 @@ export function getBestStreak(players, schedule) {
     };
 }
 
-export function getProgress(schedule) {
+export function getProgress(schedule, gamesPerSet) {
     const total = schedule.reduce((count, round) => count + round.matches.length, 0);
     const completed = schedule.reduce((count, round) =>
-        count + round.matches.filter(isMatchDone).length, 0);
+        count + round.matches.filter(match => isMatchDone(match, gamesPerSet)).length, 0);
     return { completed, total, percentage: total ? Math.round((completed / total) * 100) : 0 };
 }

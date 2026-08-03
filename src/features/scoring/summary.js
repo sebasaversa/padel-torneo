@@ -1,9 +1,9 @@
 import { getBestStreak, getLeaderboardStats, getProgress } from './statistics.js';
 
-export function buildTournamentSummaryText({ players, schedule, title, date }) {
-    const stats = getLeaderboardStats(players, schedule);
-    const progress = getProgress(schedule);
-    const streak = getBestStreak(players, schedule);
+export function buildTournamentSummaryText({ players, schedule, title, date, gamesPerSet }) {
+    const stats = getLeaderboardStats(players, schedule, gamesPerSet);
+    const progress = getProgress(schedule, gamesPerSet);
+    const streak = getBestStreak(players, schedule, gamesPerSet);
     const positions = stats.slice(0, 3).map((player, index) =>
         `${['🥇', '🥈', '🥉'][index]} ${player.name}: ${player.v}V · Dif ${player.dif >= 0 ? '+' : ''}${player.dif}`
     );

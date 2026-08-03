@@ -13,7 +13,7 @@ export function renderRoundCards(container, {
     canEditScore = () => true
 }) {
     container.innerHTML = schedule.map((round, roundIndex) => {
-        const done = isRoundDone(round);
+        const done = isRoundDone(round, gamesPerSet);
         const collapsed = collapsedRounds[roundIndex] === true;
         const resting = getRestingPlayers(round);
         const restLabel = resting.length === 0 ? 'Todos juegan'
@@ -22,7 +22,7 @@ export function renderRoundCards(container, {
         const matches = round.matches.map((match, matchIndex) => {
             const pairingEditable = canEditPairing(match);
             const scoreEditable = canEditScore(match);
-            const matchDone = isMatchDone(match);
+            const matchDone = isMatchDone(match, gamesPerSet);
             const warning = getScoreWarning(match, gamesPerSet);
             const scoreControl = (team, label) => `
                 <div class="score-control ${team === 'score1' ? 'team-one' : 'team-two'}">
