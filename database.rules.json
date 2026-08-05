@@ -7,7 +7,7 @@
         ".read": false,
         ".write": false,
         "public": {
-          ".read": "auth != null && (auth.token.platformRole === 'superAdmin' || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
+          ".read": "auth != null && ((auth.token.platformRole === 'superAdmin' && root.child('platformConfig').child('superAdminUid').val() === auth.uid) || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
           ".write": false
         },
         "_server": {
@@ -24,9 +24,9 @@
     },
     "tournamentPresence": {
       "$tournamentId": {
-        ".read": "auth != null && (auth.token.platformRole === 'superAdmin' || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
+        ".read": "auth != null && ((auth.token.platformRole === 'superAdmin' && root.child('platformConfig').child('superAdminUid').val() === auth.uid) || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
         "$uid": {
-          ".write": "auth != null && auth.uid === $uid && (auth.token.platformRole === 'superAdmin' || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
+          ".write": "auth != null && auth.uid === $uid && ((auth.token.platformRole === 'superAdmin' && root.child('platformConfig').child('superAdminUid').val() === auth.uid) || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
           ".validate": "!newData.exists() || (newData.child('uid').val() === auth.uid && newData.child('updatedAt').exists())"
         }
       }
@@ -41,12 +41,16 @@
     },
     "userProfiles": {
       "$uid": {
-        ".read": "auth != null && (auth.uid === $uid || auth.token.platformRole === 'superAdmin')",
+        ".read": "auth != null && (auth.uid === $uid || (auth.token.platformRole === 'superAdmin' && root.child('platformConfig').child('superAdminUid').val() === auth.uid))",
         ".write": false
       }
     },
     "adminActivity": {
-      ".read": "auth != null && auth.token.platformRole === 'superAdmin'",
+      ".read": "auth != null && auth.token.platformRole === 'superAdmin' && root.child('platformConfig').child('superAdminUid').val() === auth.uid",
+      ".write": false
+    },
+    "platformConfig": {
+      ".read": false,
       ".write": false
     }
   }

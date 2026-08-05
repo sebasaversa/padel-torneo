@@ -254,7 +254,7 @@
 <div class="modal" id="users-modal" role="dialog" aria-modal="true" aria-labelledby="users-modal-title" hidden>
     <div class="modal-card users-modal-card">
         <h2 id="users-modal-title">Administrar usuarios</h2>
-        <p>Creá cuentas de administradores. Las contraseñas nunca se guardan en el torneo.</p>
+        <p>Asigná roles independientemente de cómo se registró cada usuario. También podés crear una cuenta administrativa con email y contraseña.</p>
         <form id="admin-user-form" class="admin-user-form">
             <label for="admin-user-name">Nombre visible</label>
             <input id="admin-user-name" autocomplete="name" placeholder="Ej.: Ana Pérez" required>
@@ -265,7 +265,7 @@
             <button class="btn btn-primary" id="create-admin-user-button" type="submit">Crear administrador</button>
             <button class="btn btn-secondary" id="cancel-admin-edit-button" type="button" hidden>Cancelar edición</button>
         </form>
-        <h3>Administradores</h3>
+        <h3>Usuarios registrados</h3>
         <div id="admin-users-status" class="users-status" aria-live="polite"></div>
         <div id="admin-users-list" class="admin-users-list"></div>
         <div class="modal-actions"><button class="btn btn-secondary" id="close-users-modal" type="button">Cerrar</button></div>

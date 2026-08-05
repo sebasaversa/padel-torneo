@@ -6,7 +6,7 @@ function requireUid(uid) {
 export function createAdminUserApi({ callFunction }) {
     return {
         list() {
-            return callFunction('listAdminUsers');
+            return callFunction('listUsersV2');
         },
         create({ email, displayName, password }) {
             return callFunction('createAdminUser', { email, displayName, password });
@@ -19,6 +19,10 @@ export function createAdminUserApi({ callFunction }) {
         },
         generatePasswordResetLink(uid) {
             return callFunction('generateAdminPasswordResetLink', { uid: requireUid(uid) });
+        },
+        setPlatformRole(uid, role) {
+            if (role !== 'user' && role !== 'admin') throw new Error('El rol no es válido.');
+            return callFunction('setUserPlatformRoleV1', { uid: requireUid(uid), role });
         },
         setTournamentAdmin(tournamentId, uid, enabled) {
             return callFunction('setTournamentAdmin', { tournamentId, uid: requireUid(uid), enabled });

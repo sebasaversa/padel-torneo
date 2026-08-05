@@ -2,9 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+    buildAssignedRoleProfile,
     buildAdminProfile,
+    buildCustomClaimsForRole,
     normalizeAdminCreation,
     normalizeAdminUpdate,
+    normalizeAssignedPlatformRole,
     serializeUserRecord
 } from '../src/admin-users.js';
 
@@ -32,7 +35,38 @@ test('crea perfiles y respuestas públicas sin contraseñas', () => {
     });
     assert.deepEqual(serialized, {
         uid: 'admin-1', email: 'ana@ejemplo.com', displayName: 'Ana', disabled: false,
-        createdAt: 'created', lastSignInAt: null, role: 'admin'
+        username: '', createdAt: 'created', lastSignInAt: null, role: 'admin', providers: ['password']
     });
     assert.equal('password' in serialized, false);
+});
+
+test('asigna y quita el rol admin sin depender del proveedor de acceso', () => {
+    const googleUser = {
+        uid: 'google-1', email: 'ana@ejemplo.com', displayName: 'Ana', disabled: false,
+        customClaims: { preference: 'compact' }, providerData: [{ providerId: 'google.com' }]
+    };
+    assert.equal(normalizeAssignedPlatformRole('admin'), 'admin');
+    assert.throws(() => normalizeAssignedPlatformRole('superAdmin'), /user o admin/);
+    assert.deepEqual(buildCustomClaimsForRole(googleUser.customClaims, 'admin'), {
+        preference: 'compact', platformRole: 'admin'
+    });
+    assert.deepEqual(buildCustomClaimsForRole({ preference: 'compact', platformRole: 'admin' }, 'user'), {
+        preference: 'compact'
+    });
+    assert.equal(buildAssignedRoleProfile(googleUser, 'admin', { accountType: 'google' }).role, 'admin');
+    assert.equal(serializeUserRecord(googleUser, { accountType: 'google' }).role, 'user');
+});
+
+test('no expone el email interno de una cuenta por username', () => {
+    const authUser = {
+        uid: 'username-1', email: 'interno@users.padel-torneo.invalid', metadata: {}, providerData: []
+    };
+    const serialized = serializeUserRecord({
+        ...authUser
+    }, { accountType: 'username', username: 'jugador.uno', displayName: 'Jugador' });
+    assert.equal(serialized.email, '');
+    assert.equal(serialized.username, 'jugador.uno');
+    assert.equal('email' in buildAssignedRoleProfile(authUser, 'admin', {
+        accountType: 'username', username: 'jugador.uno', displayName: 'Jugador'
+    }), false);
 });

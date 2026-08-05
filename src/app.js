@@ -98,8 +98,8 @@ import { createAppController } from './app/app-controller.js';
     let tournamentAccessRole = null;
     let generatingFixture = false;
     let fixtureGenerationRevision = 0;
-    let bootstrapAttemptUid = null;
-    let bootstrapAttemptPromise = null;
+    let googleProvisionUid = null;
+    let googleProvisionPromise = null;
     let adminUsers = [];
     let editingAdminUid = null;
     let pendingTournamentDeletion = null;
@@ -244,10 +244,11 @@ import { createAppController } from './app/app-controller.js';
         signOutButton.hidden = !isRegisteredUser;
         usersButton.hidden = sessionRole !== 'superAdmin';
         tournamentAdminButton.hidden = sessionRole !== 'superAdmin' || !tournamentId;
-        const effectiveAdmin = canManageCurrentTournament();
         const roleLabel = sessionRole === 'superAdmin'
             ? ' · Super admin'
-            : effectiveAdmin ? ' · Admin del torneo' : '';
+            : sessionRole === 'admin'
+                ? ' · Administrador'
+                : tournamentId && tournamentAccessRole === 'admin' ? ' · Admin del torneo' : '';
         status.textContent = isRegisteredUser
             ? `Sesión iniciada: ${sessionUser.displayName}${roleLabel}`
             : 'Modo invitado: podés entrar a un torneo compartido desde su link.';
@@ -312,31 +313,34 @@ import { createAppController } from './app/app-controller.js';
         // Corte limpio: los torneos sin schemaVersion 2 se rechazan y no se migran.
     }
 
-    async function bootstrapSuperAdmin() {
-        if (!sessionUser || sessionUser.isAnonymous || !authSession.isGoogleUser()
-            || sessionRole === 'superAdmin') {
-            return sessionRole === 'superAdmin';
-        }
-        if (bootstrapAttemptUid === sessionUser.uid && bootstrapAttemptPromise) return bootstrapAttemptPromise;
-        bootstrapAttemptUid = sessionUser.uid;
-        bootstrapAttemptPromise = (async () => {
+    async function provisionGoogleUser() {
+        if (!sessionUser || sessionUser.isAnonymous || !authSession.isGoogleUser()) return sessionRole || 'user';
+        if (googleProvisionUid === sessionUser.uid && googleProvisionPromise) return googleProvisionPromise;
+        googleProvisionUid = sessionUser.uid;
+        googleProvisionPromise = (async () => {
             try {
-                await firebaseClient.callFunction('bootstrapSuperAdmin');
+                const result = await firebaseClient.callFunction('provisionGoogleUserV1');
                 await refreshSessionRole(true);
-                return sessionRole === 'superAdmin';
+                return result?.role || sessionRole || 'user';
             } catch (error) {
                 await refreshSessionRole();
-                return false;
+                throw error;
             }
-        })();
-        return bootstrapAttemptPromise;
+        })().catch(error => {
+            if (googleProvisionUid === sessionUser?.uid) {
+                googleProvisionUid = null;
+                googleProvisionPromise = null;
+            }
+            throw error;
+        });
+        return googleProvisionPromise;
     }
 
     function setAuthMode(mode) {
         const registering = mode === 'register';
         document.getElementById('auth-modal-title').textContent = registering ? 'Crear una cuenta' : 'Iniciar sesión';
         document.getElementById('auth-modal-description').textContent = registering
-            ? 'Elegí un email o un nombre de usuario y protegé tu cuenta con contraseña.'
+            ? 'Continuá con Google o elegí un email/usuario y protegé tu cuenta con contraseña.'
             : 'Ingresá con tu cuenta. También podés mirar o jugar desde un link sin iniciar sesión.';
         document.getElementById('auth-login-actions').hidden = registering;
         document.getElementById('auth-registration-fields').hidden = !registering;
@@ -385,13 +389,14 @@ import { createAppController } from './app/app-controller.js';
                 firebaseClient.callFunction('getTournamentAdminViewV2', { tournamentId })
             ]);
             list.replaceChildren();
-            users.forEach(user => {
+            users.filter(user => user.role === 'admin').forEach(user => {
                 const label = document.createElement('label');
                 label.className = 'admin-user-row';
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox'; checkbox.dataset.tournamentAdmin = user.uid;
                 checkbox.checked = metadata.admins?.[user.uid] === true;
-                const text = document.createElement('span'); text.textContent = `${user.displayName || user.email} · ${user.email}`;
+                const identifier = user.email || (user.username ? `@${user.username}` : 'Cuenta registrada');
+                const text = document.createElement('span'); text.textContent = `${user.displayName || identifier} · ${identifier}`;
                 label.append(checkbox, text); list.append(label);
             });
         } catch { list.textContent = 'No se pudieron cargar los administradores.'; }
@@ -568,7 +573,7 @@ import { createAppController } from './app/app-controller.js';
         const list = document.getElementById('admin-users-list');
         list.replaceChildren();
         if (!users.length) {
-            list.textContent = 'Todavía no hay administradores creados.';
+            list.textContent = 'Todavía no hay usuarios registrados.';
             return;
         }
         users.forEach(user => {
@@ -576,17 +581,36 @@ import { createAppController } from './app/app-controller.js';
             row.className = 'admin-user-row';
             const detail = document.createElement('div');
             const name = document.createElement('strong');
-            name.textContent = user.displayName || user.email;
-            const email = document.createElement('small');
-            email.textContent = `${user.email}${user.disabled ? ' · Desactivado' : ''}`;
-            detail.append(name, email);
+            name.textContent = user.displayName || user.email || user.username;
+            const metadata = document.createElement('small');
+            const identifier = user.email || (user.username ? `@${user.username}` : 'Sin identificador visible');
+            const roleLabel = user.role === 'superAdmin' ? 'Super administrador'
+                : user.role === 'admin' ? 'Administrador' : 'Usuario';
+            metadata.textContent = `${identifier} · ${roleLabel}${user.disabled ? ' · Desactivado' : ''}`;
+            detail.append(name, metadata);
             const actions = document.createElement('div');
             actions.className = 'admin-user-actions';
-            [['Editar', 'editAdmin'], [user.disabled ? 'Activar' : 'Desactivar', 'toggleAdmin'], ['Recuperar clave', 'resetAdmin'], ['Eliminar', 'deleteAdmin']].forEach(([label, action]) => {
+            const availableActions = user.role === 'superAdmin' ? [] : [
+                [user.role === 'admin' ? 'Quitar admin' : 'Hacer admin', 'setPlatformRole']
+            ];
+            if (user.role === 'admin') {
+                if (user.email && user.providers?.includes('password')) availableActions.push(
+                    ['Editar', 'editAdmin'],
+                    ['Recuperar clave', 'resetAdmin']
+                );
+                availableActions.push(
+                    [user.disabled ? 'Activar' : 'Desactivar', 'toggleAdmin'],
+                    ['Eliminar', 'deleteAdmin']
+                );
+            }
+            availableActions.forEach(([label, action]) => {
                 const button = document.createElement('button');
                 button.className = `btn btn-sm${action === 'deleteAdmin' ? ' btn-danger' : ' btn-secondary'}`;
                 button.type = 'button';
-                button.dataset[action] = user.uid;
+                if (action === 'setPlatformRole') {
+                    button.dataset.setPlatformRole = user.uid;
+                    button.dataset.role = user.role === 'admin' ? 'user' : 'admin';
+                } else button.dataset[action] = user.uid;
                 button.textContent = label;
                 actions.append(button);
             });
@@ -602,7 +626,7 @@ import { createAppController } from './app/app-controller.js';
             const users = await adminUserApi.list();
             adminUsers = users;
             renderAdminUsers(users);
-            status.textContent = `${users.length} administrador${users.length === 1 ? '' : 'es'}.`;
+            status.textContent = `${users.length} usuario${users.length === 1 ? '' : 's'} registrado${users.length === 1 ? '' : 's'}.`;
         } catch (error) {
             status.textContent = 'No se pudieron cargar los usuarios.';
         }
@@ -664,6 +688,16 @@ import { createAppController } from './app/app-controller.js';
         catch (error) { showToast(error.message || 'No se pudo actualizar el administrador.'); }
     }
 
+    async function setUserPlatformRole(uid, role) {
+        try {
+            await adminUserApi.setPlatformRole(uid, role);
+            showToast(role === 'admin' ? 'Rol de administrador asignado.' : 'Rol de administrador removido.');
+            await loadAdminUsers();
+        } catch (error) {
+            showToast(error.message || 'No se pudo actualizar el rol.');
+        }
+    }
+
     async function generateAdminPasswordResetLink(uid) {
         try {
             const { link } = await adminUserApi.generatePasswordResetLink(uid);
@@ -685,6 +719,9 @@ import { createAppController } from './app/app-controller.js';
 
     function getAuthErrorMessage(error) {
         if (error?.code === 'auth/popup-closed-by-user') return 'Se canceló el inicio de sesión.';
+        if (error?.code === 'auth/account-exists-with-different-credential') {
+            return 'Ya existe una cuenta con ese email. Iniciá sesión con el método que usaste al registrarte.';
+        }
         if (error?.code === 'auth/invalid-credential' || error?.code === 'auth/wrong-password'
             || error?.code === 'auth/user-not-found') {
             return 'El email/usuario o la contraseña no son correctos.';
@@ -697,11 +734,12 @@ import { createAppController } from './app/app-controller.js';
     async function signInWithGoogle() {
         try {
             const user = await authSession.signInWithGoogle();
+            const role = await provisionGoogleUser();
             closeAuthModal();
-            const isSuperAdmin = await bootstrapSuperAdmin();
-            showToast(isSuperAdmin
-                ? `Sesión iniciada como super admin: ${user.displayName}`
-                : `Sesión iniciada como ${user.displayName}. No se pudo activar el rol de super admin todavía.`);
+            const roleText = role === 'superAdmin'
+                ? 'super administrador'
+                : role === 'admin' ? 'administrador' : 'usuario';
+            showToast(`Sesión iniciada como ${roleText}: ${user.displayName}.`);
         } catch (error) {
             if (error?.code !== 'auth/popup-closed-by-user') showToast(getAuthErrorMessage(error));
         }
@@ -2296,10 +2334,10 @@ import { createAppController } from './app/app-controller.js';
     authSession.subscribe(user => {
         sessionUser = user;
         if (!user) {
-            bootstrapAttemptUid = null;
-            bootstrapAttemptPromise = null;
+            googleProvisionUid = null;
+            googleProvisionPromise = null;
         }
-        refreshSessionRole().then(() => bootstrapSuperAdmin());
+        refreshSessionRole().then(() => provisionGoogleUser()).catch(() => {});
     });
     tournamentState.value.players = defaultPlayers(tournamentState.value.numPlayers);
     generateSchedule();
@@ -2332,7 +2370,7 @@ import { createAppController } from './app/app-controller.js';
     shareState, shareTournamentSummary, showIdentityChoice, showMainPage, showTournamentHistory, signInWithEmailAndPassword,
     showLoginMode, showRegistrationMode, signInWithGoogle, signOut, closeAuthModal, undoLastChange,
     openUsersModal, closeUsersModal, createAdminUser, deleteAdminUser,
-    startAdminEdit, cancelAdminEdit, toggleAdminUser, generateAdminPasswordResetLink,
+    startAdminEdit, cancelAdminEdit, toggleAdminUser, setUserPlatformRole, generateAdminPasswordResetLink,
     openTournamentAdminModal, closeTournamentAdminModal, setTournamentAdmin
     , closeDeleteTournamentModal, confirmDeleteTournament, requestDeleteTournament, restoreTournament,
     toggleTournamentDeletionSelection, selectAllTournamentsForDeletion,

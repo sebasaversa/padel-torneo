@@ -45,23 +45,63 @@ export function normalizeAdminUpdate(data) {
 
 export function buildAdminProfile({ email, displayName, disabled = false }, currentProfile = {}) {
     const normalizedEmail = normalizeEmail(email);
-    return {
+    const profile = {
         ...currentProfile,
         displayName: normalizeText(displayName) || normalizedEmail,
         email: normalizedEmail,
         role: 'admin',
         disabled: disabled === true
     };
+    if (currentProfile.accountType === 'username') delete profile.email;
+    return profile;
 }
 
-export function serializeUserRecord(user) {
+export function normalizeAssignedPlatformRole(value) {
+    if (value !== 'user' && value !== 'admin') {
+        throw new Error('El rol debe ser user o admin.');
+    }
+    return value;
+}
+
+export function buildAssignedRoleProfile(user, role, currentProfile = {}) {
+    const assignedRole = normalizeAssignedPlatformRole(role);
+    const usernameAccount = currentProfile.accountType === 'username';
+    const email = usernameAccount ? '' : normalizeEmail(currentProfile.email || user?.email);
+    const profile = {
+        ...currentProfile,
+        displayName: normalizeText(currentProfile.displayName || user?.displayName) || email || 'Usuario',
+        ...(email ? { email } : {}),
+        role: assignedRole,
+        disabled: user?.disabled === true
+    };
+    if (usernameAccount) delete profile.email;
+    return profile;
+}
+
+export function buildCustomClaimsForRole(customClaims = {}, role) {
+    const assignedRole = normalizeAssignedPlatformRole(role);
+    const claims = { ...(customClaims || {}) };
+    if (assignedRole === 'admin') claims.platformRole = 'admin';
+    else delete claims.platformRole;
+    return claims;
+}
+
+export function serializeUserRecord(user, profile = {}) {
+    const accountType = profile.accountType || '';
+    const email = accountType === 'username' ? '' : (profile.email || user.email || '');
+    const providers = (user.providerData || []).map(provider => provider.providerId).filter(Boolean);
+    if (!providers.length && user.email) providers.push('password');
     return {
         uid: user.uid,
-        email: user.email || '',
-        displayName: user.displayName || user.email || 'Usuario',
+        email,
+        username: profile.username || '',
+        displayName: profile.displayName || user.displayName || email || profile.username || 'Usuario',
         disabled: user.disabled === true,
         createdAt: user.metadata?.creationTime || null,
         lastSignInAt: user.metadata?.lastSignInTime || null,
-        role: user.customClaims?.platformRole || 'admin'
+        role: user.customClaims?.platformRole === 'superAdmin'
+            ? 'superAdmin'
+            : user.customClaims?.platformRole === 'admin' ? 'admin' : 'user',
+        providers
     };
 }

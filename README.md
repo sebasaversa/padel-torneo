@@ -14,6 +14,7 @@ La versión pública está disponible en [sebasaversa.github.io/padel-torneo](ht
 - Games por set configurables y anotación manual o mediante botones táctiles.
 - Tabla de posiciones con victorias, derrotas, games a favor/en contra y diferencia.
 - Torneos compartidos con actualización en tiempo real, presencia, identidad de jugador e historial de cambios.
+- Registro e inicio de sesión con Google, email o username y contraseña.
 - Catálogo global de torneos compartidos, accesible desde la pantalla principal y ordenado por última actualización.
 - Exportación de auditoría e importación v2 como torneo nuevo, sin restaurar resultados, permisos ni actividad.
 - Diseño responsive para computadora y celular.
@@ -30,14 +31,14 @@ Un link con `?torneo=<id>` es un torneo compartido en Firebase. Un link con `#s=
 
 ## Roles y permisos
 
-- **Super admin:** inicia con Google, administra cuentas de admins, ve todos los torneos y puede recuperar los eliminados.
-- **Admin:** inicia con email y contraseña; crea sus torneos y administra la configuración completa de los que creó o le asignaron.
-- **Usuario:** puede crear una cuenta con email o con un username, siempre con contraseña, y usarla para unirse a torneos sin recibir permisos administrativos.
+- **Super admin:** es la única cuenta configurada mediante `SUPER_ADMIN_EMAIL`; administra usuarios, ve todos los torneos y puede recuperar los eliminados.
+- **Admin:** puede autenticarse con Google, email o username y contraseña; crea sus torneos y administra los que creó o le asignaron.
+- **Usuario:** puede registrarse con Google, email o username y contraseña, y usar su cuenta para unirse a torneos sin recibir permisos administrativos.
 - **Participante:** entra por invitación, elige su jugador y sólo puede cambiar su nombre o cargar resultados en los partidos que juega.
 - **Espectador:** entra por link sin elegir jugador y consulta el torneo en modo lectura.
 
 Las operaciones de participantes se validan en Cloud Functions y las reglas de Realtime Database bloquean las escrituras directas no autorizadas.
-La recuperación por email está disponible para las cuentas creadas con email. Las cuentas creadas sólo con username no tienen recuperación por email.
+El método de autenticación y el rol son independientes. El super admin asigna o quita el rol `admin` desde el panel **Usuarios** sin cambiar la forma en que esa persona inicia sesión. La recuperación por email está disponible para cuentas con email; las cuentas creadas sólo con username no tienen recuperación por correo.
 
 ## Desarrollo local
 
@@ -119,6 +120,9 @@ usernameDirectory/{usernameHash}
 
 userProfiles/{uid}
                         Perfil y tipo de cuenta, sin contraseñas
+
+platformConfig/superAdminUid
+                        UID canónico y privado del único super admin efectivo
 ```
 
 La configuración pública del proyecto Firebase vive en `src/app.js`; las credenciales de cliente no son secretas. La protección real depende de Authentication, Rules con denegación por defecto y Functions autoritativas. Ni owner, admin ni superadmin pueden escribir directamente configuración, fixture o scores.
@@ -127,7 +131,7 @@ Los nombres de jugadores, resultados, historial e información genérica del nav
 
 ### Recuperación operativa
 
-El email del super admin se conserva como secreto `SUPER_ADMIN_EMAIL` en Firebase Functions. Si hubiera que recuperar su permiso, esa misma cuenta inicia sesión con Google y la Function `bootstrapSuperAdmin` restaura su claim. Nunca se debe guardar ese email ni contraseñas en el repositorio.
+El email del super admin se conserva como secreto `SUPER_ADMIN_EMAIL` en Firebase Functions. Al iniciar sesión con Google se valida el email verificado, se restaura la claim si fuera necesario y se registra el UID canónico privado. Functions y Rules exigen tanto la claim como ese UID, por lo que otra claim obsoleta no otorga acceso. Nunca se debe guardar el email autorizado ni contraseñas en el repositorio.
 
 Los torneos se eliminan de forma lógica: el super admin puede restaurarlos desde el historial. Las contraseñas de admins se recuperan con el enlace que genera el panel **Usuarios**.
 

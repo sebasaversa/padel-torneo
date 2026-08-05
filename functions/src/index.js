@@ -4,21 +4,26 @@ import { getDatabase, ServerValue } from 'firebase-admin/database';
 import { defineSecret } from 'firebase-functions/params';
 import { HttpsError, onCall, onRequest } from 'firebase-functions/v2/https';
 import {
+    buildAssignedRoleProfile,
     buildAdminProfile,
+    buildCustomClaimsForRole,
     normalizeAdminCreation,
     normalizeAdminUpdate,
+    normalizeAssignedPlatformRole,
     serializeUserRecord
 } from './admin-users.js';
 import {
     buildInternalUsernameEmail,
     buildMissingUsernameEmail,
+    buildGoogleUserProfile,
     buildUserProfile,
     canReserveUsername,
     normalizeAccountRegistration,
+    normalizeGoogleIdentity,
     normalizeUsername,
     usernameDirectoryKey
 } from './user-accounts.js';
-import { getSuperAdminAuthorization, isAdminAccount } from './authorization.js';
+import { getAuthorizedPlatformRole, getSuperAdminAuthorization, isAdminAccount } from './authorization.js';
 import { buildTournamentDeletion, requireTournamentId } from './tournament-admin.js';
 import { buildTournamentCatalogPayload, getTournamentCatalogAuthorization } from './tournament-catalog.js';
 import { buildSuperAdminProfile, isConfiguredSuperAdmin } from './super-admin.js';
@@ -38,8 +43,13 @@ if (!getApps().length) initializeApp();
 
 const superAdminEmail = defineSecret('SUPER_ADMIN_EMAIL');
 
-function requireSuperAdmin(request) {
-    const authorization = getSuperAdminAuthorization(request.auth);
+async function getCanonicalSuperAdminUid() {
+    const snapshot = await getDatabase().ref('platformConfig/superAdminUid').get();
+    return typeof snapshot.val() === 'string' ? snapshot.val() : '';
+}
+
+async function requireSuperAdmin(request) {
+    const authorization = getSuperAdminAuthorization(request.auth, await getCanonicalSuperAdminUid());
     if (!authorization.allowed) throw new HttpsError(authorization.code, authorization.message);
     return authorization.auth;
 }
@@ -64,11 +74,15 @@ function asHttpsError(error) {
     });
 }
 
-function requireAuthenticated(request) {
+async function requireAuthenticated(request) {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Ingresá para continuar.');
+    const claimedRole = request.auth.token.platformRole || null;
+    const platformRole = claimedRole === 'superAdmin'
+        ? getAuthorizedPlatformRole(request.auth, await getCanonicalSuperAdminUid())
+        : claimedRole;
     return {
         uid: request.auth.uid,
-        platformRole: request.auth.token.platformRole || null
+        platformRole
     };
 }
 
@@ -117,6 +131,50 @@ async function saveRegularUserProfile(uid, account) {
         createdAt: current?.createdAt || ServerValue.TIMESTAMP,
         updatedAt: ServerValue.TIMESTAMP
     }));
+}
+
+async function saveGoogleUserProfile(uid, identity, platformRole) {
+    const profileRef = getDatabase().ref(`userProfiles/${uid}`);
+    const transaction = await profileRef.transaction(current => ({
+        ...buildGoogleUserProfile(identity, current || {}, platformRole),
+        createdAt: current?.createdAt || ServerValue.TIMESTAMP,
+        updatedAt: ServerValue.TIMESTAMP
+    }));
+    return transaction.snapshot.val();
+}
+
+async function clearSuperAdminClaim(uid) {
+    if (!uid) return;
+    try {
+        const user = await getAuth().getUser(uid);
+        const claims = { ...(user.customClaims || {}) };
+        if (claims.platformRole !== 'superAdmin') return;
+        delete claims.platformRole;
+        await getAuth().setCustomUserClaims(uid, claims);
+        await getDatabase().ref(`userProfiles/${uid}`).transaction(current => current ? {
+            ...current,
+            role: 'user',
+            updatedAt: ServerValue.TIMESTAMP
+        } : current);
+    } catch (error) {
+        if (error?.code !== 'auth/user-not-found') throw error;
+    }
+}
+
+async function activateCanonicalSuperAdmin(uid, userRecord) {
+    const configRef = getDatabase().ref('platformConfig');
+    const previousUid = (await configRef.child('superAdminUid').get()).val();
+    await configRef.update({
+        superAdminUid: uid,
+        updatedAt: ServerValue.TIMESTAMP
+    });
+    await getAuth().setCustomUserClaims(uid, {
+        ...(userRecord.customClaims || {}),
+        platformRole: 'superAdmin'
+    });
+    if (typeof previousUid === 'string' && previousUid && previousUid !== uid) {
+        await clearSuperAdminClaim(previousUid);
+    }
 }
 
 async function releaseUsernameReservation(ref, registrationId, uid = null) {
@@ -253,7 +311,7 @@ export const resolveUsernameLoginV2 = onCall(async request => {
 });
 
 export const createTournamentV2 = onCall(async request => {
-    const actor = requireAuthenticated(request);
+    const actor = await requireAuthenticated(request);
     if (!['admin', 'superAdmin'].includes(actor.platformRole)) {
         throw new HttpsError('permission-denied', 'Sólo un administrador puede crear torneos.');
     }
@@ -308,7 +366,7 @@ export const createTournamentV2 = onCall(async request => {
 });
 
 export const mutateTournamentV2 = onCall(async request => {
-    const actor = requireAuthenticated(request);
+    const actor = await requireAuthenticated(request);
     const tournamentId = request.data?.tournamentId;
     if (typeof tournamentId !== 'string' || !/^t_[a-f0-9]{30}$/.test(tournamentId)) {
         throw new HttpsError('invalid-argument', 'El torneo no es válido.');
@@ -359,7 +417,7 @@ export const mutateTournamentV2 = onCall(async request => {
 });
 
 export const createTournamentInvitationV2 = onCall(async request => {
-    const actor = requireAuthenticated(request);
+    const actor = await requireAuthenticated(request);
     const tournamentId = request.data?.tournamentId;
     const role = request.data?.role === 'participant' ? 'participant' : 'spectator';
     const database = getDatabase();
@@ -401,7 +459,7 @@ export const createTournamentInvitationV2 = onCall(async request => {
 });
 
 export const joinTournamentV2 = onCall(async request => {
-    const actor = requireAuthenticated(request);
+    const actor = await requireAuthenticated(request);
     const tournamentId = request.data?.tournamentId;
     let hash;
     try {
@@ -447,7 +505,7 @@ export const joinTournamentV2 = onCall(async request => {
 });
 
 export const claimTournamentPlayerV2 = onCall(async request => {
-    const actor = requireAuthenticated(request);
+    const actor = await requireAuthenticated(request);
     const tournamentId = request.data?.tournamentId;
     const playerId = request.data?.playerId;
     const database = getDatabase();
@@ -518,7 +576,7 @@ export const claimTournamentPlayerV2 = onCall(async request => {
 });
 
 export const getTournamentAccessViewV2 = onCall(async request => {
-    const actor = requireAuthenticated(request);
+    const actor = await requireAuthenticated(request);
     const tournamentId = request.data?.tournamentId;
     const snapshot = await getDatabase().ref(`tournamentAccess/${tournamentId}`).get();
     const access = snapshot.val();
@@ -534,36 +592,70 @@ export const getTournamentAccessViewV2 = onCall(async request => {
     };
 });
 
-// Sólo la cuenta definida como secreto puede ejecutar esta inicialización.
-// Es idempotente: puede repetirse para restaurar la custom claim si fuera necesario.
-export const bootstrapSuperAdmin = onCall({ secrets: [superAdminEmail] }, async request => {
-    if (!request.auth) throw new HttpsError('unauthenticated', 'Iniciá sesión con Google para continuar.');
-    const email = request.auth.token.email;
-    if (!isConfiguredSuperAdmin({ email }, superAdminEmail.value())) {
-        throw new HttpsError('permission-denied', 'Esta cuenta no puede inicializar el super admin.');
-    }
-
-    const userRecord = await getAuth().getUser(request.auth.uid);
-    await getAuth().setCustomUserClaims(request.auth.uid, {
-        ...(userRecord.customClaims || {}),
-        platformRole: 'superAdmin'
-    });
-
-    const profileRef = getDatabase().ref(`userProfiles/${request.auth.uid}`);
-    await profileRef.transaction(current => ({
+async function saveSuperAdminProfile(uid, identity, userRecord) {
+    const profileRef = getDatabase().ref(`userProfiles/${uid}`);
+    const transaction = await profileRef.transaction(current => ({
         ...buildSuperAdminProfile({
-            email,
-            displayName: request.auth.token.name || userRecord.displayName
+            email: identity.email,
+            displayName: identity.displayName || userRecord.displayName
         }, current || {}),
         createdAt: current?.createdAt || ServerValue.TIMESTAMP,
         updatedAt: ServerValue.TIMESTAMP
     }));
+    return transaction.snapshot.val();
+}
+
+export const provisionGoogleUserV1 = onCall({ secrets: [superAdminEmail] }, async request => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Iniciá sesión con Google para continuar.');
+    let identity;
+    try {
+        identity = normalizeGoogleIdentity(request.auth.token);
+    } catch (error) {
+        throw new HttpsError('failed-precondition', error.message);
+    }
+    const userRecord = await getAuth().getUser(request.auth.uid);
+    let platformRole = userRecord.customClaims?.platformRole || null;
+    if (isConfiguredSuperAdmin(identity, superAdminEmail.value())) {
+        await activateCanonicalSuperAdmin(request.auth.uid, userRecord);
+        platformRole = 'superAdmin';
+        await saveSuperAdminProfile(request.auth.uid, identity, userRecord);
+    } else {
+        if (platformRole === 'superAdmin') {
+            const claims = { ...(userRecord.customClaims || {}) };
+            delete claims.platformRole;
+            await getAuth().setCustomUserClaims(request.auth.uid, claims);
+            platformRole = null;
+        }
+        await saveGoogleUserProfile(request.auth.uid, identity, platformRole);
+    }
+    return {
+        role: platformRole === 'superAdmin' || platformRole === 'admin' ? platformRole : 'user',
+        displayName: identity.displayName
+    };
+});
+
+// Compatibilidad operativa: conserva el bootstrap explícito, ahora con las
+// mismas validaciones y la misma fuente autoritativa que el alta Google.
+export const bootstrapSuperAdmin = onCall({ secrets: [superAdminEmail] }, async request => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Iniciá sesión con Google para continuar.');
+    let identity;
+    try {
+        identity = normalizeGoogleIdentity(request.auth.token);
+    } catch (error) {
+        throw new HttpsError('failed-precondition', error.message);
+    }
+    if (!isConfiguredSuperAdmin(identity, superAdminEmail.value())) {
+        throw new HttpsError('permission-denied', 'Esta cuenta no puede inicializar el super admin.');
+    }
+    const userRecord = await getAuth().getUser(request.auth.uid);
+    await activateCanonicalSuperAdmin(request.auth.uid, userRecord);
+    await saveSuperAdminProfile(request.auth.uid, identity, userRecord);
 
     return { role: 'superAdmin' };
 });
 
 export const createAdminUser = onCall(async request => {
-    const auth = requireSuperAdmin(request);
+    const auth = await requireSuperAdmin(request);
     let data;
     try {
         data = normalizeAdminCreation(request.data);
@@ -578,7 +670,7 @@ export const createAdminUser = onCall(async request => {
 });
 
 export const updateAdminUser = onCall(async request => {
-    const auth = requireSuperAdmin(request);
+    const auth = await requireSuperAdmin(request);
     const uid = typeof request.data?.uid === 'string' ? request.data.uid : '';
     if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
     let updates;
@@ -594,7 +686,7 @@ export const updateAdminUser = onCall(async request => {
 });
 
 export const deleteAdminUser = onCall(async request => {
-    const auth = requireSuperAdmin(request);
+    const auth = await requireSuperAdmin(request);
     const uid = typeof request.data?.uid === 'string' ? request.data.uid : '';
     if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
     if (uid === request.auth.uid) throw new HttpsError('failed-precondition', 'No podés eliminar tu propia cuenta.');
@@ -609,15 +701,52 @@ export const deleteAdminUser = onCall(async request => {
 });
 
 export const listAdminUsers = onCall(async request => {
-    requireSuperAdmin(request);
+    await requireSuperAdmin(request);
     const result = await getAuth().listUsers(1000);
     return result.users
         .filter(user => user.customClaims?.platformRole === 'admin')
         .map(serializeUserRecord);
 });
 
+export const listUsersV2 = onCall(async request => {
+    await requireSuperAdmin(request);
+    const [result, profilesSnapshot] = await Promise.all([
+        getAuth().listUsers(1000),
+        getDatabase().ref('userProfiles').get()
+    ]);
+    const profiles = profilesSnapshot.val() || {};
+    return result.users
+        .filter(user => Boolean(user.email) || (user.providerData || []).length > 0)
+        .map(user => serializeUserRecord(user, profiles[user.uid] || {}));
+});
+
+export const setUserPlatformRoleV1 = onCall(async request => {
+    const auth = await requireSuperAdmin(request);
+    const uid = typeof request.data?.uid === 'string' ? request.data.uid.trim() : '';
+    if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
+    if (uid === await getCanonicalSuperAdminUid()) {
+        throw new HttpsError('failed-precondition', 'El rol del super admin no se modifica desde esta operación.');
+    }
+    let role;
+    try {
+        role = normalizeAssignedPlatformRole(request.data?.role);
+    } catch (error) {
+        throw new HttpsError('invalid-argument', error.message);
+    }
+    const user = await getAuth().getUser(uid);
+    await getAuth().setCustomUserClaims(uid, buildCustomClaimsForRole(user.customClaims, role));
+    const profileRef = getDatabase().ref(`userProfiles/${uid}`);
+    const profileTransaction = await profileRef.transaction(current => ({
+        ...buildAssignedRoleProfile(user, role, current || {}),
+        createdAt: current?.createdAt || ServerValue.TIMESTAMP,
+        updatedAt: ServerValue.TIMESTAMP
+    }));
+    await logAdminActivity(auth, role === 'admin' ? 'assignPlatformAdmin' : 'removePlatformAdmin', uid);
+    return serializeUserRecord(await getAuth().getUser(uid), profileTransaction.snapshot.val() || {});
+});
+
 export const generateAdminPasswordResetLink = onCall(async request => {
-    const auth = requireSuperAdmin(request);
+    const auth = await requireSuperAdmin(request);
     const uid = typeof request.data?.uid === 'string' ? request.data.uid : '';
     if (!uid) throw new HttpsError('invalid-argument', 'El usuario es obligatorio.');
     const user = await getAuth().getUser(uid);
@@ -630,7 +759,7 @@ export const generateAdminPasswordResetLink = onCall(async request => {
 });
 
 export const setTournamentAdmin = onCall(async request => {
-    const auth = requireSuperAdmin(request);
+    const auth = await requireSuperAdmin(request);
     let tournamentId;
     try { tournamentId = requireTournamentId(request.data?.tournamentId); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
     const uid = typeof request.data?.uid === 'string' ? request.data.uid : '';
@@ -667,7 +796,7 @@ export const setTournamentAdmin = onCall(async request => {
 });
 
 export const getTournamentAdminViewV2 = onCall(async request => {
-    requireSuperAdmin(request);
+    await requireSuperAdmin(request);
     let tournamentId;
     try { tournamentId = requireTournamentId(request.data?.tournamentId); } catch (error) {
         throw new HttpsError('invalid-argument', error.message);
@@ -687,7 +816,7 @@ export const getTournamentAdminViewV2 = onCall(async request => {
 });
 
 export const setTournamentDeleted = onCall(async request => {
-    const auth = requireSuperAdmin(request);
+    const auth = await requireSuperAdmin(request);
     let tournamentId;
     try { tournamentId = requireTournamentId(request.data?.tournamentId); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
     const deleted = request.data?.deleted === true;
@@ -704,7 +833,7 @@ export const setTournamentDeleted = onCall(async request => {
 });
 
 export const permanentlyDeleteTournament = onCall(async request => {
-    const auth = requireSuperAdmin(request);
+    const auth = await requireSuperAdmin(request);
     let tournamentId;
     try { tournamentId = requireTournamentId(request.data?.tournamentId); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
     const ref = getDatabase().ref(`tournaments/${tournamentId}`);
@@ -723,7 +852,11 @@ export const permanentlyDeleteTournament = onCall(async request => {
 });
 
 export const listTournamentCatalog = onCall(async request => {
-    const authorization = getTournamentCatalogAuthorization(request.auth);
+    const actor = await requireAuthenticated(request);
+    const authorization = getTournamentCatalogAuthorization({
+        ...request.auth,
+        token: { ...request.auth.token, platformRole: actor.platformRole }
+    });
     if (!authorization.allowed) throw new HttpsError(authorization.code, authorization.message);
     const database = getDatabase();
     const [snapshot, profilesSnapshot, accessSnapshot] = await Promise.all([

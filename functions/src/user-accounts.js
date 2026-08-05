@@ -90,3 +90,32 @@ export function buildUserProfile(account, current = {}) {
     }
     return base;
 }
+
+export function normalizeGoogleIdentity(token = {}) {
+    if (token?.firebase?.sign_in_provider !== 'google.com') {
+        throw new Error('La sesión debe haberse iniciado con Google.');
+    }
+    const email = normalizeText(token.email).toLowerCase();
+    if (!email || token.email_verified !== true) {
+        throw new Error('Google no proporcionó un email verificado.');
+    }
+    return {
+        accountType: 'google',
+        email,
+        displayName: normalizeText(token.name) || email.split('@')[0]
+    };
+}
+
+export function buildGoogleUserProfile(identity, current = {}, platformRole = null) {
+    const role = platformRole === 'superAdmin' || platformRole === 'admin'
+        ? platformRole
+        : 'user';
+    return {
+        ...current,
+        displayName: normalizeText(current.displayName) || identity.displayName,
+        email: identity.email,
+        role,
+        disabled: current.disabled === true,
+        accountType: current.accountType || 'google'
+    };
+}

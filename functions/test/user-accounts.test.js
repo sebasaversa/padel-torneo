@@ -6,9 +6,11 @@ import {
     USERNAME_RESERVATION_TTL_MS,
     buildInternalUsernameEmail,
     buildMissingUsernameEmail,
+    buildGoogleUserProfile,
     buildUserProfile,
     canReserveUsername,
     normalizeAccountRegistration,
+    normalizeGoogleIdentity,
     normalizeUsername,
     usernameDirectoryKey
 } from '../src/user-accounts.js';
@@ -71,4 +73,48 @@ test('sólo recupera reservas incompletas cuando vencieron', () => {
         status: 'reserved',
         createdAt: now - USERNAME_RESERVATION_TTL_MS
     }, now), true);
+});
+
+test('provisiona una identidad Google verificada como usuario común', () => {
+    const identity = normalizeGoogleIdentity({
+        email: ' Persona@Ejemplo.com ',
+        email_verified: true,
+        name: ' Persona ',
+        firebase: { sign_in_provider: 'google.com' }
+    });
+    assert.deepEqual(identity, {
+        accountType: 'google',
+        email: 'persona@ejemplo.com',
+        displayName: 'Persona'
+    });
+    assert.deepEqual(buildGoogleUserProfile(identity), {
+        accountType: 'google',
+        email: 'persona@ejemplo.com',
+        displayName: 'Persona',
+        role: 'user',
+        disabled: false
+    });
+});
+
+test('Google no cambia un rol asignado ni sobrescribe el nombre elegido', () => {
+    const identity = {
+        accountType: 'google', email: 'persona@ejemplo.com', displayName: 'Nombre Google'
+    };
+    const profile = buildGoogleUserProfile(identity, {
+        displayName: 'Nombre elegido', accountType: 'email', disabled: false
+    }, 'admin');
+    assert.equal(profile.displayName, 'Nombre elegido');
+    assert.equal(profile.accountType, 'email');
+    assert.equal(profile.role, 'admin');
+});
+
+test('rechaza sesiones no Google o sin email verificado', () => {
+    assert.throws(() => normalizeGoogleIdentity({
+        email: 'persona@ejemplo.com', email_verified: true,
+        firebase: { sign_in_provider: 'password' }
+    }), /Google/);
+    assert.throws(() => normalizeGoogleIdentity({
+        email: 'persona@ejemplo.com', email_verified: false,
+        firebase: { sign_in_provider: 'google.com' }
+    }), /verificado/);
 });

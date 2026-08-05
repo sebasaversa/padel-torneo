@@ -135,6 +135,8 @@ export function bindStaticUIEvents(actions) {
         if (toggle) actions.toggleAdminUser(toggle.dataset.toggleAdmin);
         const reset = event.target.closest('[data-reset-admin]');
         if (reset) actions.generateAdminPasswordResetLink(reset.dataset.resetAdmin);
+        const role = event.target.closest('[data-set-platform-role]');
+        if (role) actions.setUserPlatformRole(role.dataset.setPlatformRole, role.dataset.role);
     });
     document.getElementById('tournament-admin-list')?.addEventListener('change', event => {
         if (event.target.matches('[data-tournament-admin]')) actions.setTournamentAdmin(event.target.dataset.tournamentAdmin, event.target.checked);

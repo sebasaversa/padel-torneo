@@ -16,6 +16,7 @@ const tournamentId = 't_012345678901234567890123456789';
 async function seed() {
     await testEnv.withSecurityRulesDisabled(async context => {
         await context.database().ref().set({
+            platformConfig: { superAdminUid: 'super' },
             tournaments: {
                 [tournamentId]: {
                     public: {
@@ -48,6 +49,12 @@ async function seed() {
                     authEmail: 'interno@privado.invalid',
                     status: 'active'
                 }
+            },
+            userProfiles: {
+                player: { displayName: 'Jugador', role: 'user' }
+            },
+            adminActivity: {
+                event: { action: 'test', actorUid: 'super' }
             }
         });
     });
@@ -128,6 +135,19 @@ test('presencia efímera permite sólo el nodo propio de un miembro', async () =
         uid: 'foreign',
         updatedAt: 1
     }));
+});
+
+test('una claim superAdmin sólo autoriza al UID canónico', async () => {
+    await seed();
+    const canonical = testEnv.authenticatedContext('super', { platformRole: 'superAdmin' }).database();
+    const stale = testEnv.authenticatedContext('stale', { platformRole: 'superAdmin' }).database();
+    await assertSucceeds(canonical.ref(`tournaments/${tournamentId}/public`).once('value'));
+    await assertFails(stale.ref(`tournaments/${tournamentId}/public`).once('value'));
+    await assertSucceeds(canonical.ref('userProfiles/player').once('value'));
+    await assertFails(stale.ref('userProfiles/player').once('value'));
+    await assertSucceeds(canonical.ref('adminActivity').once('value'));
+    await assertFails(stale.ref('adminActivity').once('value'));
+    await assertFails(canonical.ref('platformConfig').once('value'));
 });
 
 after(async () => {

@@ -82,6 +82,13 @@ test('smoke v2: creación, roles, score, extensión y barreras directas', {
     const ownerRecord = await getAuth().createUser({ email, password });
     await getAuth().setCustomUserClaims(ownerRecord.uid, { platformRole: 'admin' });
     const owner = await signIn(email, password);
+    const superRecord = await getAuth().createUser({ email: 'super@example.test', password });
+    await getAuth().setCustomUserClaims(superRecord.uid, { platformRole: 'superAdmin' });
+    await getDatabase().ref('platformConfig/superAdminUid').set(superRecord.uid);
+    const superAdmin = await signIn('super@example.test', password);
+    const staleRecord = await getAuth().createUser({ email: 'stale-super@example.test', password });
+    await getAuth().setCustomUserClaims(staleRecord.uid, { platformRole: 'superAdmin' });
+    const staleSuperAdmin = await signIn('stale-super@example.test', password);
     const emailRegistration = await call('registerUserV2', null, {
         identifier: 'outsider@example.test',
         password
@@ -89,6 +96,16 @@ test('smoke v2: creación, roles, score, extensión y barreras directas', {
     assert.equal(emailRegistration.accountType, 'email');
     assert.equal(typeof emailRegistration.customToken, 'string');
     const outsider = await signIn('outsider@example.test', password);
+    const listedUsers = await call('listUsersV2', superAdmin.idToken, null);
+    assert.equal(listedUsers.find(user => user.uid === outsider.localId)?.role, 'user');
+    await call('setUserPlatformRoleV1', superAdmin.idToken, {
+        uid: outsider.localId,
+        role: 'admin'
+    });
+    assert.equal((await getAuth().getUser(outsider.localId)).customClaims.platformRole, 'admin');
+    assert.equal((await getDatabase().ref(`userProfiles/${outsider.localId}/role`).get()).val(), 'admin');
+    const staleAuthorization = await call('listUsersV2', staleSuperAdmin.idToken, null, { expectError: true });
+    assert.equal(staleAuthorization.status, 'PERMISSION_DENIED');
 
     const usernameRegistration = await call('registerUserV2', null, {
         identifier: 'Jugador.Uno',
