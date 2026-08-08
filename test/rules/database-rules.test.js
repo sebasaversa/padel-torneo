@@ -12,6 +12,8 @@ const testEnv = await initializeTestEnvironment({
     database: { rules }
 });
 const tournamentId = 't_012345678901234567890123456789';
+const groupTournamentId = 't_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const groupId = 'g_012345678901234567890123456789';
 
 async function seed() {
     await testEnv.withSecurityRulesDisabled(async context => {
@@ -28,6 +30,15 @@ async function seed() {
                     _server: {
                         operationReceipts: { secret: { digest: 'privado' } }
                     }
+                },
+                [groupTournamentId]: {
+                    public: {
+                        schemaVersion: 2,
+                        configuration: { numPlayers: 8, numCourts: 2, pairingMode: 'rotating' },
+                        metadata: { ownerUid: 'former-admin', groupId },
+                        state: { revision: 0 }
+                    },
+                    _server: { operationReceipts: { secret: { digest: 'privado' } } }
                 }
             },
             tournamentAccess: {
@@ -40,7 +51,33 @@ async function seed() {
                     },
                     claims: { 0: { uid: 'player' } },
                     invitationHashes: { secreto: { role: 'participant' } }
+                },
+                [groupTournamentId]: {
+                    mode: 'group',
+                    groupId,
+                    members: { 'former-admin': { role: 'admin' } },
+                    claims: { 0: { uid: 'group-member', source: 'group' } }
                 }
+            },
+            groupDomains: {
+                [groupId]: {
+                    metadata: { status: 'active' },
+                    access: {
+                        ownerUid: 'group-owner',
+                        members: {
+                            'group-owner': { role: 'member', status: 'active', accountStatus: 'active' },
+                            'group-member': { role: 'member', status: 'active', accountStatus: 'active' },
+                            'former-admin': { role: 'member', status: 'removed', accountStatus: 'active' }
+                        }
+                    },
+                    invitations: { secret: { tokenHash: 'privado' } }
+                }
+            },
+            groupsByUser: {
+                'group-member': { [groupId]: { effectiveRole: 'member' } }
+            },
+            groupInvitationInbox: {
+                'group-member': { invite: { groupId, status: 'active' } }
             },
             usernameDirectory: {
                 hashprivado: {
@@ -148,6 +185,36 @@ test('una claim superAdmin sólo autoriza al UID canónico', async () => {
     await assertSucceeds(canonical.ref('adminActivity').once('value'));
     await assertFails(stale.ref('adminActivity').once('value'));
     await assertFails(canonical.ref('platformConfig').once('value'));
+});
+
+test('torneo de grupo autoriza por membresía grupal actual y no por acceso estático', async () => {
+    await seed();
+    const member = testEnv.authenticatedContext('group-member').database();
+    const former = testEnv.authenticatedContext('former-admin').database();
+    const canonical = testEnv.authenticatedContext('super', { platformRole: 'superAdmin' }).database();
+    await assertSucceeds(member.ref(`tournaments/${groupTournamentId}/public`).once('value'));
+    await assertFails(former.ref(`tournaments/${groupTournamentId}/public`).once('value'));
+    await assertFails(canonical.ref(`tournaments/${groupTournamentId}/public`).once('value'));
+    await assertSucceeds(member.ref(`tournamentPresence/${groupTournamentId}/group-member`).set({
+        uid: 'group-member', updatedAt: 1
+    }));
+    await assertFails(former.ref(`tournamentPresence/${groupTournamentId}/former-admin`).set({
+        uid: 'former-admin', updatedAt: 1
+    }));
+});
+
+test('dominio y auditoría de grupos son privados; sólo proyecciones propias son legibles', async () => {
+    await seed();
+    const member = testEnv.authenticatedContext('group-member').database();
+    const foreign = testEnv.authenticatedContext('foreign').database();
+    await assertFails(member.ref(`groupDomains/${groupId}`).once('value'));
+    await assertFails(member.ref(`groupAudit/${groupId}`).once('value'));
+    await assertSucceeds(member.ref(`groupsByUser/group-member/${groupId}`).once('value'));
+    await assertSucceeds(member.ref('groupInvitationInbox/group-member').once('value'));
+    await assertFails(foreign.ref(`groupsByUser/group-member/${groupId}`).once('value'));
+    await assertFails(member.ref(`groupsByUser/group-member/${groupId}`).set({ effectiveRole: 'owner' }));
+    await assertFails(member.ref('groupRateLimits').once('value'));
+    await assertFails(member.ref('groupRateLimits/test/key/1').set({ count: 1 }));
 });
 
 after(async () => {

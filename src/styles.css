@@ -11,6 +11,7 @@
             --team-two-bg: #dbeafe;
         }
         * { box-sizing: border-box; }
+        [hidden] { display: none !important; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             background: linear-gradient(135deg, #ecfdf5 0%, var(--light) 50%, #eff6ff 100%);
@@ -76,6 +77,95 @@
         .btn-secondary { background: white; color: var(--dark); border: 1px solid var(--border); }
         .btn-danger { background: var(--danger); color: white; }
         .btn-sm { padding: 5px 10px; font-size: 0.8rem; }
+        .groups-page-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 12px;
+        }
+        .groups-status {
+            min-height: 1.25rem;
+            margin: -10px 0 10px;
+            color: var(--muted);
+            text-align: center;
+            font-size: 0.85rem;
+        }
+        .group-list,
+        .group-player-list { display: grid; gap: 9px; }
+        .group-list-item,
+        .group-player-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            background: #fff;
+            color: var(--dark);
+            text-align: left;
+        }
+        .group-list-item strong,
+        .group-player-item strong { display: block; overflow-wrap: anywhere; }
+        .group-list-item small,
+        .group-player-item small {
+            display: block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 0.78rem;
+        }
+        .group-list-button { cursor: pointer; font: inherit; }
+        .group-list-button:hover { border-color: var(--primary); }
+        .group-item-actions {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            gap: 6px;
+        }
+        .group-subheading { margin-top: 16px; }
+        .empty-state { margin: 6px 0; color: var(--muted); }
+        .is-muted { opacity: 0.65; }
+        .group-detail-header { display: grid; gap: 12px; }
+        .group-detail-header h2 { margin-bottom: 3px; }
+        .group-detail-header p { margin: 0; color: var(--muted); }
+        .group-role-badge {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: var(--primary-light);
+            color: #047857;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+        .group-recovery-warning { margin: 0; }
+        .group-section-heading {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .group-section-heading h2 { margin-bottom: 3px; }
+        .group-section-heading p { margin: 0; color: var(--muted); font-size: 0.82rem; }
+        .group-player-item { align-items: flex-start; }
+        .group-player-select {
+            display: flex;
+            align-items: flex-start;
+            gap: 9px;
+            flex: 1 1 180px;
+        }
+        .group-player-select input { margin-top: 3px; accent-color: var(--primary); }
+        .group-stats-table { overflow-x: auto; }
+        .group-stats-table table { min-width: 620px; }
+        @media (max-width: 620px) {
+            .group-list-item,
+            .group-player-item,
+            .group-section-heading { align-items: stretch; flex-direction: column; }
+            .group-player-select { flex: 0 1 auto; width: 100%; }
+            .group-item-actions { justify-content: flex-start; }
+            .group-item-actions .btn { flex: 1 1 auto; }
+        }
         .toast {
             position: fixed;
             bottom: 20px;

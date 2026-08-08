@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
     <meta name="description" content="Anotador de torneo americano de pádel — jugadores configurables, 2 canchas, rotación automática">
     <title>Torneo Americano Pádel</title>
     <link rel="stylesheet" href="./src/styles.css">
@@ -23,6 +24,7 @@
         <div class="toolbar">
             <button class="btn btn-primary" id="create-shared-button">☁️ Crear torneo compartido</button>
             <button class="btn btn-secondary" id="history-button">🕘 Historial de torneos</button>
+            <button class="btn btn-secondary" id="groups-button" hidden>👥 Mis grupos</button>
             <button class="btn btn-secondary" id="home-button" hidden>← Inicio</button>
             <button class="btn btn-secondary" id="auth-button">🔐 Iniciar sesión</button>
             <button class="btn btn-secondary" id="sign-out-button" hidden>↪ Cerrar sesión</button>
@@ -152,6 +154,92 @@
                 </div>
             </div>
             <div class="tournament-history-list" id="tournament-history-list"></div>
+        </div>
+    </section>
+
+    <section id="groups-page" hidden aria-labelledby="groups-title">
+        <div class="history-page-header">
+            <h1 id="groups-title">👥 Mis grupos</h1>
+            <button class="btn btn-secondary" id="back-from-groups-button">← Volver</button>
+        </div>
+        <p class="subtitle history-page-subtitle">Plantillas de jugadores, torneos e indicadores compartidos.</p>
+        <p class="groups-status" id="groups-status" aria-live="polite"></p>
+
+        <div id="groups-overview">
+            <div class="groups-page-actions">
+                <button class="btn btn-primary" id="create-group-button">＋ Crear grupo</button>
+            </div>
+            <div class="card">
+                <h2>Tus grupos</h2>
+                <div class="group-list" id="groups-list"></div>
+            </div>
+            <div class="card">
+                <h2>Invitaciones pendientes</h2>
+                <div class="group-list" id="group-invitations-list"></div>
+            </div>
+        </div>
+
+        <div id="group-detail" hidden>
+            <div class="groups-page-actions">
+                <button class="btn btn-secondary" id="back-to-groups-list-button">← Todos los grupos</button>
+            </div>
+            <div class="card group-detail-header">
+                <div>
+                    <h2 id="group-detail-title"></h2>
+                    <p id="group-detail-description"></p>
+                    <span class="group-role-badge" id="group-detail-role"></span>
+                </div>
+                <div class="group-item-actions" id="group-admin-actions" hidden>
+                    <button class="btn btn-secondary btn-sm" id="edit-group-button">Editar grupo</button>
+                    <button class="btn btn-secondary btn-sm" id="invite-group-user-button">Invitar por username</button>
+                    <button class="btn btn-secondary btn-sm" id="add-provisional-player-button">Agregar jugador sin cuenta</button>
+                </div>
+                <div class="group-item-actions" id="group-owner-actions" hidden>
+                    <button class="btn btn-secondary btn-sm" id="create-general-group-link-button">Crear enlace general</button>
+                    <button class="btn btn-secondary btn-sm" id="revoke-general-group-link-button">Revocar enlace general</button>
+                    <button class="btn btn-danger btn-sm" id="archive-group-button">Archivar grupo</button>
+                    <button class="btn btn-primary btn-sm" id="restore-group-button" hidden>Reactivar grupo</button>
+                </div>
+                <button class="btn btn-secondary btn-sm" id="leave-group-button" hidden>Salir del grupo</button>
+                <p class="info-box group-recovery-warning" id="group-recovery-warning" hidden>
+                    Este grupo requiere que soporte reasigne el ownership. El contenido se conserva en modo de sólo lectura.
+                </p>
+            </div>
+
+            <div class="card">
+                <div class="group-section-heading">
+                    <div><h2>Plantilla de jugadores</h2><p>Elegí entre 4 y 16 jugadores activos para el próximo torneo.</p></div>
+                    <button class="btn btn-primary" id="create-group-tournament-button">🏆 Crear torneo</button>
+                </div>
+                <div class="group-player-list" id="group-players-list"></div>
+            </div>
+
+            <div class="card" id="group-pending-invitations-card">
+                <h2>Invitaciones enviadas</h2>
+                <div class="group-list" id="group-pending-invitations-list"></div>
+            </div>
+
+            <div class="card">
+                <h2>Historial del grupo</h2>
+                <div class="group-list" id="group-tournaments-list"></div>
+            </div>
+
+            <div class="card">
+                <div class="group-section-heading">
+                    <h2>Estadísticas básicas</h2>
+                    <div class="group-item-actions" role="group" aria-label="Filtrar estadísticas">
+                        <button class="btn btn-secondary btn-sm" data-group-stats-scope="active">Activos</button>
+                        <button class="btn btn-secondary btn-sm" data-group-stats-scope="all">Historial completo</button>
+                    </div>
+                </div>
+                <div class="group-stats-table">
+                    <table>
+                        <thead><tr><th>#</th><th>Jugador</th><th>T</th><th>PJ</th><th>V</th><th>D</th><th>GF</th><th>GC</th><th>Dif</th></tr></thead>
+                        <tbody id="group-stats-body"></tbody>
+                    </table>
+                </div>
+                <p class="table-legend"><strong>Referencia:</strong> T: apariciones en torneos · PJ: partidos jugados. Los datos se recalculan desde los torneos del grupo.</p>
+            </div>
         </div>
     </section>
 </div>

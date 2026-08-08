@@ -53,6 +53,46 @@ test('llama Functions con el token autenticado sin depender de scripts globales'
     assert.equal(request.options.body, '{"data":null}');
 });
 
+test('conecta Auth, Database y Functions a emuladores sólo cuando se configura explícitamente', async () => {
+    const calls = [];
+    const auth = {
+        currentUser: { isAnonymous: false, getIdToken: async () => 'token-local' },
+        useEmulator: (...args) => calls.push(['auth', ...args])
+    };
+    const database = { useEmulator: (...args) => calls.push(['database', ...args]) };
+    let requestUrl;
+    const firebase = {
+        apps: [],
+        initializeApp: () => { firebase.apps.push({}); },
+        auth: () => auth,
+        database: Object.assign(() => database, { ServerValue: { TIMESTAMP: 'timestamp' } })
+    };
+    const client = createFirebaseClient({
+        firebase,
+        config: { projectId: 'padel-test' },
+        emulator: {
+            authUrl: 'http://127.0.0.1:9099',
+            databaseHost: '127.0.0.1',
+            databasePort: 9000,
+            functionsOrigin: 'http://127.0.0.1:5001/padel-test/us-central1'
+        },
+        fetchFn: async url => {
+            requestUrl = url;
+            return { ok: true, json: async () => ({ result: { ok: true } }) };
+        }
+    });
+
+    client.getAuth();
+    client.getAuth();
+    await client.callFunction('listMyGroupsV1');
+
+    assert.deepEqual(calls, [
+        ['auth', 'http://127.0.0.1:9099', { disableWarnings: true }],
+        ['database', '127.0.0.1', 9000]
+    ]);
+    assert.equal(requestUrl, 'http://127.0.0.1:5001/padel-test/us-central1/listMyGroupsV1');
+});
+
 test('lee el campo result del protocolo callable de Firebase', async () => {
     const auth = { currentUser: { isAnonymous: false, getIdToken: async () => 'token-seguro' } };
     const client = createFirebaseClient({

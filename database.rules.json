@@ -7,7 +7,7 @@
         ".read": false,
         ".write": false,
         "public": {
-          ".read": "auth != null && ((auth.token.platformRole === 'superAdmin' && root.child('platformConfig').child('superAdminUid').val() === auth.uid) || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
+          ".read": "auth != null && ((!data.child('metadata').child('groupId').exists() && ((auth.token.platformRole === 'superAdmin' && root.child('platformConfig').child('superAdminUid').val() === auth.uid) || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())) || (data.child('metadata').child('groupId').exists() && root.child('groupDomains').child(data.child('metadata').child('groupId').val()).child('access').child('members').child(auth.uid).child('status').val() === 'active' && root.child('groupDomains').child(data.child('metadata').child('groupId').val()).child('access').child('members').child(auth.uid).child('accountStatus').val() === 'active'))",
           ".write": false
         },
         "_server": {
@@ -24,14 +24,43 @@
     },
     "tournamentPresence": {
       "$tournamentId": {
-        ".read": "auth != null && ((auth.token.platformRole === 'superAdmin' && root.child('platformConfig').child('superAdminUid').val() === auth.uid) || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
+        ".read": "auth != null && ((!root.child('tournaments').child($tournamentId).child('public').child('metadata').child('groupId').exists() && ((auth.token.platformRole === 'superAdmin' && root.child('platformConfig').child('superAdminUid').val() === auth.uid) || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())) || (root.child('tournaments').child($tournamentId).child('public').child('metadata').child('groupId').exists() && root.child('groupDomains').child(root.child('tournaments').child($tournamentId).child('public').child('metadata').child('groupId').val()).child('access').child('members').child(auth.uid).child('status').val() === 'active' && root.child('groupDomains').child(root.child('tournaments').child($tournamentId).child('public').child('metadata').child('groupId').val()).child('access').child('members').child(auth.uid).child('accountStatus').val() === 'active'))",
         "$uid": {
-          ".write": "auth != null && auth.uid === $uid && ((auth.token.platformRole === 'superAdmin' && root.child('platformConfig').child('superAdminUid').val() === auth.uid) || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())",
+          ".write": "auth != null && auth.uid === $uid && ((!root.child('tournaments').child($tournamentId).child('public').child('metadata').child('groupId').exists() && ((auth.token.platformRole === 'superAdmin' && root.child('platformConfig').child('superAdminUid').val() === auth.uid) || root.child('tournamentAccess').child($tournamentId).child('members').child(auth.uid).exists())) || (root.child('tournaments').child($tournamentId).child('public').child('metadata').child('groupId').exists() && root.child('groupDomains').child(root.child('tournaments').child($tournamentId).child('public').child('metadata').child('groupId').val()).child('access').child('members').child(auth.uid).child('status').val() === 'active' && root.child('groupDomains').child(root.child('tournaments').child($tournamentId).child('public').child('metadata').child('groupId').val()).child('access').child('members').child(auth.uid).child('accountStatus').val() === 'active'))",
           ".validate": "!newData.exists() || (newData.child('uid').val() === auth.uid && newData.child('updatedAt').exists())"
         }
       }
     },
     "creationRequests": {
+      ".read": false,
+      ".write": false
+    },
+    "groupDomains": {
+      ".read": false,
+      ".write": false,
+      ".indexOn": ["access/ownerUid"]
+    },
+    "groupsByUser": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
+    },
+    "groupInvitationInbox": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
+    },
+    "groupTournamentIndex": {
+      ".read": false,
+      ".write": false
+    },
+    "groupAudit": {
+      ".read": false,
+      ".write": false
+    },
+    "groupRateLimits": {
       ".read": false,
       ".write": false
     },

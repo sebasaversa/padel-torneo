@@ -1,725 +1,580 @@
-# Plan de grupos, identidades de jugadores y estadísticas históricas
+# Plan de grupos v1
 
-Documento de trabajo para incorporar grupos persistentes de jugadores, torneos asociados, invitaciones, membresías y estadísticas globales y por grupo al anotador de torneos de pádel.
+Documento de implementación para incorporar grupos privados, una plantilla reutilizable de jugadores, torneos asociados, historial y estadísticas grupales básicas al anotador de torneos de pádel.
 
-Este plan **no modifica todavía el funcionamiento de la aplicación**. Define el alcance, las decisiones recomendadas, el modelo de permisos, la arquitectura de datos, la compatibilidad con torneos anteriores y una implementación por etapas verificables. Cada etapa cerrada deberá incluir pruebas y su propio commit para facilitar revisión y reversión.
+Esta primera versión reduce deliberadamente el alcance para evitar fusiones de identidad, permisos ambiguos y agregados estadísticos inconsistentes. Las funcionalidades postergadas se especifican en [`PLAN-GRUPOS_v2.md`](./PLAN-GRUPOS_v2.md).
 
-Runtime de desarrollo: **Node.js 22 LTS**, usando la versión exacta indicada por el proyecto también para los procesos hijos de npm, Vite, Firebase y los emuladores.
-
-## Objetivo
-
-Permitir que una comunidad habitual de jugadores pueda:
-
-- crear un grupo y conservar una lista reutilizable de jugadores;
-- invitar usuarios registrados o agregar jugadores que todavía no tienen cuenta;
-- crear torneos independientes o asociados a un único grupo;
-- seleccionar para cada torneo sólo los miembros que juegan esa fecha;
-- conservar el historial completo de torneos del grupo;
-- consultar estadísticas históricas del grupo y rankings internos;
-- consultar las estadísticas globales de cada jugador y su desglose por grupo;
-- entrar, salir o ser removido de un grupo sin alterar resultados históricos;
-- administrar el grupo mediante permisos locales, sin otorgar privilegios globales de plataforma.
-
-La funcionalidad debe mantener la seguridad en dos capas: la interfaz mostrará únicamente las acciones disponibles para cada persona, y Cloud Functions y Firebase Rules impedirán accesos o mutaciones no autorizadas aunque se intente operar directamente contra el backend.
+Cada etapa cerrada deberá incluir pruebas, revisión y un commit independiente. Runtime de desarrollo: **Node.js 22 LTS**, usando la versión exacta del proyecto también en npm, Vite, Firebase y emuladores.
 
 ## Estado
 
 - `[x]` Completado
 - `[~]` En curso
 - `[ ]` Pendiente
-- `[!]` Requiere confirmación antes de cerrar la implementación
+- `[!]` Requiere decisión explícita
 
 Estado general: `[ ]` Pendiente de implementación.
 
-## Alcance
+## Objetivo de v1
 
-### Incluido en la primera versión
+Permitir que una comunidad habitual pueda:
 
-- creación, edición y archivo de grupos;
-- login y alta pública mediante Google para cualquier usuario;
-- listado “Mis grupos” para cada usuario registrado;
-- roles locales de propietario, administrador y miembro;
-- invitaciones por nombre de usuario y por enlace seguro;
-- jugadores provisionales sin cuenta;
-- vinculación posterior de un jugador provisional con una cuenta;
-- salida voluntaria y remoción de miembros sin pérdida histórica;
-- transferencia obligatoria de propiedad antes de que el propietario salga;
-- torneos independientes y torneos pertenecientes a un grupo;
-- selección de participantes desde la plantilla del grupo;
+- crear un grupo privado;
+- reutilizar una plantilla de miembros registrados y jugadores provisionales;
+- invitar cuentas por username o mediante un enlace general multiuso;
+- crear torneos asociados al grupo;
+- seleccionar quiénes juegan cada torneo;
+- conservar el historial del grupo;
+- consultar estadísticas grupales básicas;
+- salir, ser removido o volver mediante una invitación dirigida sin perder resultados históricos;
+- administrar el grupo con roles locales independientes de los roles globales.
+
+## Decisiones cerradas para v1
+
+1. Todos los grupos son privados.
+2. Los roles locales son `owner`, `admin` y `member`.
+3. Sólo owner y admins crean torneos de grupo.
+4. Los miembros comunes no pueden crear torneos, sin configuración para habilitarlo.
+5. Un torneo pertenece a cero o un grupo y no puede moverse después.
+6. La identidad deportiva de v1 es local al grupo mediante `groupPlayerId`.
+7. Los jugadores provisionales no pueden ser reclamados ni vinculados con cuentas en v1.
+8. No existen estadísticas globales entre grupos en v1.
+9. Las estadísticas grupales son aditivas y se calculan bajo demanda desde torneos fuente.
+10. No se mantienen agregados incrementales ni contribuciones materializadas en v1.
+11. Los torneos de grupo sólo son administrados por el owner actual, los admins actuales y el superadmin mediante Functions auditadas.
+12. Existe un único enlace general activo por grupo, creado y revocado sólo por el owner, con siete días de vigencia y diez usos.
+13. Archivar convierte el grupo y todos sus torneos en modo de sólo lectura hasta su reactivación.
+14. La pertenencia de un torneo a un grupo se registra en una referencia autoritativa; `groupTournamentIndex` es sólo una proyección de navegación.
+15. Ninguna mutación de un torneo de grupo se ejecuta con una autorización leída fuera de control: primero reserva un grant autoritativo y breve dentro del grupo.
+16. Los clientes nunca leen el nodo completo `groupDomains/{groupId}`; reciben vistas filtradas por Functions o leen exclusivamente proyecciones sin secretos.
+
+## Alcance incluido
+
+- creación, edición, archivo y reactivación de grupos;
+- listado “Mis grupos”;
+- roles locales y transferencia de propiedad;
+- invitaciones dirigidas por username;
+- un enlace general multiuso rígido por grupo;
+- miembros registrados;
+- jugadores provisionales locales al grupo;
+- activación y desactivación manual de provisionales y estado derivado de membresía para registrados;
+- salida y remoción con historial de membresía;
+- torneos independientes sin cambios funcionales;
+- torneos de grupo administrados por roles actuales del grupo;
+- snapshots históricos de participantes;
 - historial de torneos por grupo;
-- perfil deportivo estable para cada jugador;
-- estadísticas globales y estadísticas por grupo;
-- rankings históricos básicos;
-- configuraciones predeterminadas de torneo por grupo;
-- auditoría de operaciones administrativas;
-- compatibilidad con los torneos existentes.
+- estadísticas básicas por `groupPlayerId`;
+- ranking grupal básico;
+- auditoría administrativa;
+- compatibilidad con torneos existentes.
 
-### Preparado en el modelo, pero postergado
+## Fuera de v1
 
-- temporadas configurables;
-- convocatorias y confirmación de asistencia;
-- suplentes;
-- ranking Elo u otro rating competitivo;
-- logros, insignias y reconocimientos;
-- comparación directa entre jugadores;
-- ubicaciones habituales y calendario recurrente;
-- solicitudes espontáneas para entrar a un grupo;
-- notificaciones por email o push;
-- exportación visual del ranking;
-- fotos, comentarios o contenido social.
+Se trasladan a [`PLAN-GRUPOS_v2.md`](./PLAN-GRUPOS_v2.md):
 
-Estas extensiones no deben condicionar el lanzamiento inicial, pero los identificadores y agregados no deben impedir incorporarlas después.
+- reclamo o vinculación de jugadores provisionales;
+- perfiles deportivos globales;
+- estadísticas globales y desglose entre grupos;
+- rachas, parejas, rivales, logros, torneos ganados y otras métricas avanzadas;
+- agregados incrementales, workers estadísticos y cachés persistentes;
+- administradores específicos de un torneo de grupo;
+- conservación de permisos del creador después de perder el rol grupal;
+- creación de torneos por miembros comunes;
+- enlaces particulares de reclamo;
+- múltiples enlaces generales simultáneos;
+- cupos, vencimientos y permisos configurables para enlaces;
+- operaciones parciales sobre grupos archivados;
+- temporadas, Elo, convocatorias, asistencia, suplentes y funciones sociales.
 
-### Fuera de alcance inicial
+## Prerrequisito de cuentas
 
-- grupos públicos indexados por buscadores;
-- pagos, cuotas o reservas de canchas;
-- chat interno;
-- federación automática de un mismo jugador entre cuentas duplicadas;
-- asociación de un torneo con más de un grupo;
-- reconocimiento automático de identidades por coincidencia de nombres;
-- eliminación física inmediata de grupos con historial.
+La aplicación ya permite cuentas mediante Google, email o username y contraseña. El proveedor de login es independiente del rol de plataforma.
 
-## Diagnóstico del sistema actual
+El único superadmin efectivo requiere simultáneamente:
 
-La aplicación ya dispone de:
+- custom claim `platformRole: "superAdmin"`;
+- coincidencia del UID con `platformConfig/superAdminUid`;
+- bootstrap autorizado por el secreto backend `SUPER_ADMIN_EMAIL`.
 
-- cuentas registradas mediante Firebase Authentication;
-- un rol global `superAdmin`;
-- un rol global `admin` para administración de torneos autorizados;
-- cuentas comunes con perfil `user`;
-- permisos específicos por torneo: administrador, participante y espectador;
-- propiedad del torneo mediante `ownerUid`;
-- acceso privado por torneo en `tournamentAccess`;
-- jugadores locales al fixture identificados actualmente por índices enteros;
-- resultados, leaderboard, diferencia de games, progreso y mejor racha calculados dentro de cada torneo;
-- historial de torneos segmentado según autorización;
-- auditoría y borrado lógico de torneos;
-- Cloud Functions como límite confiable para operaciones privilegiadas;
-- Realtime Database Rules con denegación por defecto.
+Estado del prerrequisito:
 
-Los grupos requieren agregar una identidad deportiva estable. El nombre o índice local de un jugador dentro de un fixture no alcanza para sumar estadísticas entre torneos: el índice `2` sólo tiene significado dentro de ese torneo y un nombre puede cambiar, repetirse o contener errores.
+- `[x]` Functions, Rules y frontend desplegados con UID canónico;
+- `[x]` claims obsoletas de otros UIDs rechazadas;
+- `[ ]` prueba de recuperación si cambia el UID canónico;
+- `[ ]` verificación productiva completa con una segunda cuenta Google común.
 
-## Prerrequisito: login y registro público con Google
+No se habilitará grupos en producción antes de cerrar estas dos pruebas pendientes.
 
-Esta ampliación se implementará **antes** que la funcionalidad de grupos. Las membresías, invitaciones, ownership y perfiles deportivos necesitan un UID registrado y estable; resolver el onboarding después obligaría a rehacer flujos de creación, estados vacíos y vinculación de identidad.
+## Entidades e invariantes
 
-### Comportamiento deseado
+### Cuenta
 
-- Cualquier persona puede elegir “Continuar con Google”.
-- Si es su primer ingreso, Firebase Authentication crea la cuenta y el backend crea un `userProfile` común con rol de perfil `user`.
-- Si la cuenta ya existe, inicia sesión sin crear otro perfil ni sobrescribir datos actuales.
-- La única cuenta confirmada por el propietario y configurada en `SUPER_ADMIN_EMAIL` recibe el rol global `superAdmin`.
-- Ningún otro email puede recibir ni ejercer `superAdmin`, aunque un cliente manipule el payload o exista una custom claim obsoleta.
-- Un admin de plataforma existente conserva `platformRole: "admin"` si inicia mediante un proveedor Google vinculado; el alta pública no lo degrada ni lo promueve.
-- El mensaje de bienvenida distingue “Super administrador”, “Administrador” y “Usuario”; una cuenta Google común no verá un error relacionado con el bootstrap.
-- Registro por username o email/contraseña continúa disponible y compatible.
+Una cuenta es un UID de Firebase Authentication. Puede pertenecer a varios grupos y tener roles distintos en cada uno.
 
-### Fuente autoritativa del super admin
+Para grupos, una cuenta “registrada activa” debe existir en Auth, no ser anónima, no estar disabled y tener perfil de aplicación activo. El proveedor Google, email o username no modifica esta condición ni el rol local.
 
-El email autorizado —confirmado como parte de este plan y conservado fuera del repositorio— se mantendrá únicamente en el secreto backend `SUPER_ADMIN_EMAIL`; no se confiará en un email enviado por el cliente ni se incorporará como constante al frontend o a este documento público.
+### Jugador local del grupo
 
-Para garantizar que exista **un único super admin efectivo**, se recomienda complementar la custom claim con un UID canónico privado:
+Cada fila reutilizable de la plantilla se identifica con un `groupPlayerId` opaco y estable dentro de un único grupo.
 
-```text
-platformConfig
-  superAdminUid
-  updatedAt
-```
+Puede ser:
 
-- El bootstrap exige sesión Google, email verificado y coincidencia normalizada con `SUPER_ADMIN_EMAIL`.
-- Al completarse, registra el UID canónico y asigna `platformRole: "superAdmin"`.
-- Si la cuenta autorizada fue recreada y cambió su UID, la recuperación reemplaza el UID canónico y revoca la claim anterior cuando todavía existe.
-- Functions autorizan super admin sólo si coinciden la claim y el UID canónico.
-- Database Rules verifican la claim y `platformConfig/superAdminUid`; el nodo no será legible ni escribible por clientes.
-- Una claim `superAdmin` accidental en otra cuenta no concede acceso porque su UID no coincide con la configuración autoritativa.
-- Toda recuperación o reemplazo queda registrada en `adminActivity`.
+- `registered`: representa una membresía vinculada a un UID;
+- `provisional`: representa sólo un nombre local sin cuenta ni permisos.
 
-### Provisionamiento de usuarios Google
+Invariantes:
 
-Después del login, una Function idempotente de provisionamiento deberá:
+- un `groupPlayerId` nunca cambia de grupo;
+- un UID tiene como máximo un jugador `registered` dentro del mismo grupo;
+- un jugador `registered` está vinculado a exactamente una membresía;
+- una membresía es efectiva sólo cuando `status == active` y `accountStatus == active`;
+- un provisional nunca tiene `linkedUid` en v1;
+- nombres iguales no implican identidad compartida;
+- salir o ser removido desactiva la fila registrada, pero no la elimina;
+- una reincorporación dirigida reactiva la misma fila y no crea otra;
+- un provisional no se convierte en registrado en v1.
 
-1. exigir una sesión no anónima;
-2. comprobar que el proveedor autenticado sea Google y que el email esté verificado;
-3. leer la identidad desde el token confiable de Firebase;
-4. crear el perfil `user` si no existe;
-5. preservar `createdAt`, nombre elegido posteriormente y cualquier rol administrativo válido existente;
-6. aplicar el bootstrap exclusivo si el email coincide con el secreto;
-7. devolver el rol efectivo para refrescar la sesión y la interfaz.
+### Membresía
 
-El cliente nunca podrá solicitar `role`, `platformRole`, UID objetivo ni email privilegiado dentro de esta operación.
+La membresía relaciona un UID con un grupo y con su `groupPlayerId` registrado.
 
-### Colisiones y vinculación de proveedores
+Estados:
 
-- No se crearán dos perfiles deportivos porque una misma persona use Google y email/contraseña.
-- Si Firebase informa que el email ya existe con otro proveedor, la interfaz guiará a iniciar sesión con el método original y vincular Google desde una sesión autenticada.
-- La vinculación de proveedores conserva el mismo UID; no fusiona cuentas ni estadísticas por nombre o email desde el cliente.
-- Una eventual fusión de dos UIDs distintos seguirá siendo una operación administrativa separada, auditada y fuera del alta pública.
+- `active`;
+- `left`;
+- `removed`.
 
-### Orden de despliegue de este prerrequisito
+Cada membresía conserva:
 
-1. Incorporar el UID canónico y endurecer helpers, Functions y Rules de super admin.
-2. Probar que la cuenta autorizada conserva acceso y que cualquier otra claim queda bloqueada.
-3. Incorporar el provisionamiento idempotente de perfiles Google.
-4. Corregir la experiencia de login y los mensajes para usuarios comunes.
-5. Desplegar primero las Functions nuevas.
-6. Publicar el frontend y entrar con la cuenta autorizada para establecer `platformConfig/superAdminUid` mientras las Rules anteriores siguen vigentes.
-7. Confirmar que el UID canónico existe y recién entonces desplegar las Rules endurecidas.
-8. Verificar en producción con la cuenta super admin y con una segunda cuenta Google común.
+- `membershipRevision` creciente;
+- fecha de primera incorporación;
+- fecha de activación actual;
+- rol actual;
+- historial append-only de ingresos, salidas, remociones, reincorporaciones y cambios de rol.
 
-No se abrirá la creación de grupos hasta completar estas verificaciones.
+### Torneo
 
-## Principios e invariantes
+- `groupId: null` significa torneo independiente.
+- Un torneo de grupo conserva su `groupId` y snapshots aunque el grupo se archive.
+- Los resultados apuntan a participantes locales del torneo y cada participante de grupo guarda su `groupPlayerId`.
+- La membresía actual no modifica snapshots ni resultados históricos.
+- La relación autoritativa grupo ↔ torneo vive en `groupDomains/{groupId}/tournamentRefs/{tournamentId}`; el índice externo no define pertenencia ni estadísticas.
+- La creación no se informa como exitosa hasta que la referencia autoritativa y el torneo están confirmados; reintentos completan o revierten el mismo provisioning.
 
-### Separación de cuenta, jugador y membresía
+## Roles y permisos
 
-Se distinguirán tres entidades:
+### Roles globales
 
-1. **Cuenta**: identidad que inicia sesión, representada por un UID de Firebase Authentication.
-2. **Jugador**: identidad deportiva estable que acumula estadísticas, representada por un `playerProfileId`.
-3. **Membresía**: relación entre una cuenta o jugador y un grupo, con rol y estado propios.
-
-Una cuenta registrada tendrá como máximo un perfil deportivo principal activo. Un perfil deportivo puede comenzar como provisional, sin cuenta vinculada, y ser reclamado posteriormente mediante un flujo confirmado.
-
-### Identidad histórica estable
-
-- Los resultados históricos apuntarán a `playerProfileId`, no al nombre actual del jugador.
-- Cada torneo conservará además una copia del nombre mostrado al momento de su creación.
-- Cambiar el nombre visible no reescribirá torneos anteriores.
-- Salir de un grupo no borrará la identidad ni las contribuciones estadísticas históricas.
-- Nunca se fusionarán jugadores automáticamente sólo porque sus nombres coinciden.
-
-### Pertenencia del torneo
-
-- Un torneo pertenece a cero o un grupo.
-- `groupId: null` representa un torneo independiente.
-- La asociación con el grupo se decide al crear el torneo.
-- En la primera versión no se permitirá asociar retroactivamente un torneo ya jugado ni moverlo entre grupos.
-- Un torneo de grupo conservará el `groupId` aunque el grupo se archive.
-
-Esta restricción evita duplicar estadísticas, ambigüedad de permisos y movimientos históricos difíciles de auditar.
-
-### Fuente de verdad y datos derivados
-
-- Los resultados y participantes estables del torneo son la fuente de verdad.
-- Los índices y estadísticas agregadas son datos derivados y reconstruibles.
-- Ningún cliente podrá escribir directamente totales globales, porcentajes o rankings.
-- Toda actualización de agregados incluirá una revisión de origen para ser idempotente.
-
-### Preservación histórica
-
-- Archivar un grupo impide nuevas invitaciones y torneos, pero conserva su consulta histórica.
-- Salir o ser removido cambia el estado de la membresía, no elimina el registro.
-- El borrado lógico o anulación de un torneo debe retirar su contribución de las estadísticas sin borrar la auditoría.
-- Corregir un resultado debe reemplazar la contribución anterior, no sumarla nuevamente.
-
-## Modelo de roles y permisos
-
-### Roles globales existentes
-
-| Rol global | Alcance recomendado |
+| Rol | Alcance |
 | --- | --- |
-| `superAdmin` | Administración y soporte de toda la plataforma, con intervención excepcional y auditada. |
-| `admin` | Capacidades administrativas de plataforma ya existentes y gestión de torneos propios o asignados; no administra automáticamente todos los grupos. |
-| `user` | Cuenta registrada normal, apta para crear grupos, recibir invitaciones y mantener un perfil deportivo. |
+| `superAdmin` | Soporte excepcional mediante Functions auditadas. |
+| `admin` | Administración de plataforma existente; no obtiene acceso automático a grupos. |
+| `user` | Cuenta común que puede crear grupos y recibir invitaciones. |
 
-No se agregará un nuevo rol global para grupos. La administración de un grupo será siempre un permiso local.
+### Owner
 
-Las custom claims se reservarán para `superAdmin` y `admin` de plataforma. Una cuenta común se reconocerá por su autenticación y perfil activo; no necesita una claim `user`. Los roles de grupo se consultarán desde datos autoritativos de acceso y **no** se copiarán a custom claims, para que una promoción, degradación, salida o remoción tenga efecto inmediato sin esperar la renovación del token.
-
-En la interfaz se usarán etiquetas inequívocas:
-
-- “Super administrador”;
-- “Administrador de plataforma”;
-- “Propietario del grupo”;
-- “Administrador del grupo”;
-- “Administrador del torneo”.
-
-### Roles locales del grupo
-
-#### Propietario (`owner`)
-
-Existe exactamente uno por grupo.
-
-En persistencia, `groupAccess/{groupId}/ownerUid` será la única fuente autoritativa de propiedad. “Owner” será el rol efectivo derivado de que el UID autenticado coincide con ese campo; no se guardará una segunda asignación independiente `role: "owner"` que pueda divergir. El propietario también tendrá una membresía activa para plantilla e índices.
+Existe exactamente uno por grupo y se deriva exclusivamente de `ownerUid`.
 
 Puede:
 
-- editar la identidad y configuración del grupo;
-- invitar, remover y reincorporar miembros;
-- nombrar o quitar administradores del grupo;
-- transferir la propiedad;
-- administrar todos los torneos del grupo;
-- archivar o reactivar el grupo;
-- gestionar jugadores provisionales y solicitudes de vinculación.
+- editar el grupo;
+- administrar miembros y provisionales;
+- crear y revocar el enlace general;
+- nombrar o quitar admins;
+- crear y administrar torneos del grupo;
+- transferir propiedad;
+- archivar y reactivar.
 
-No puede salir mientras siga siendo propietario. Antes debe transferir la propiedad a otro miembro activo o archivar el grupo siguiendo el flujo de contingencia definido.
+No puede salir ni eliminar su cuenta mientras sea owner, aunque el grupo esté archivado. Debe transferir primero.
 
-#### Administrador del grupo (`admin`)
+### Admin del grupo
 
 Puede:
 
-- editar información operativa del grupo;
-- invitar usuarios y agregar jugadores provisionales;
+- editar información operativa;
+- invitar por username;
+- agregar y desactivar provisionales;
 - remover miembros comunes;
 - crear y administrar torneos del grupo;
-- corregir resultados y gestionar configuraciones predeterminadas;
-- consultar la auditoría operativa del grupo.
+- consultar auditoría operativa.
 
 No puede:
 
-- remover ni degradar al propietario;
-- transferir la propiedad;
-- archivar definitivamente el grupo;
-- nombrar o quitar otros administradores;
-- borrar la historia del grupo.
+- crear ni revocar el enlace general;
+- nombrar o degradar admins;
+- remover al owner;
+- transferir propiedad;
+- archivar o reactivar;
+- administrar un grupo archivado.
 
-En la primera versión, sólo el propietario modifica los roles administrativos. Esto evita cadenas de escalamiento difíciles de explicar.
+En v1, “editar el grupo” o “información operativa” significa únicamente `name` y `description`. `visibility`, `ownerUid`, roles, estado, límites e identificadores jamás se aceptan en `updateGroupV1`; usan operaciones específicas o son inmutables.
 
-#### Miembro (`member`)
+### Member
 
 Puede:
 
-- ver el grupo, su plantilla, torneos y estadísticas;
-- participar en torneos;
-- consultar sus propias estadísticas;
-- salir voluntariamente;
-- crear torneos únicamente si la configuración `membersCanCreateTournaments` está activada.
+- ver el grupo activo, plantilla, torneos e indicadores grupales;
+- participar;
+- anotar resultados únicamente si su membresía sigue activa y su UID está vinculado por backend al `groupPlayerId` participante;
+- salir voluntariamente si el grupo está activo.
 
-No puede administrar membresías, roles, invitaciones ni resultados ajenos salvo autorización específica dentro de un torneo.
+No puede crear torneos, administrar invitaciones, miembros, roles, configuración ni resultados ajenos.
 
-### Estados que no son roles
+### Matriz resumida
 
-Los siguientes valores describen un ciclo de vida y no deben convertirse en permisos:
-
-- invitación pendiente;
-- invitación aceptada, rechazada, vencida o revocada;
-- membresía activa;
-- miembro que salió;
-- miembro removido;
-- jugador provisional sin cuenta;
-- grupo activo o archivado.
-
-Separar rol y estado evita, por ejemplo, que una invitación pendiente sea interpretada accidentalmente como acceso de lectura.
-
-### Matriz de permisos recomendada
-
-| Acción | Super admin | Admin global | Owner del grupo | Admin del grupo | Miembro |
+| Acción | Superadmin | Admin global | Owner | Admin grupo | Member |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Crear un grupo propio | Sí | Sí | — | — | Sí |
-| Listar un grupo privado | Soporte | Sólo con membresía | Sí | Sí | Sí |
-| Ver historial y estadísticas | Soporte | Sólo con membresía | Sí | Sí | Sí |
-| Editar perfil operativo | Soporte | Según rol local | Sí | Sí | No |
-| Cambiar privacidad | Soporte | Sólo como owner | Sí | No | No |
-| Invitar miembros | Soporte | Según rol local | Sí | Sí | No |
-| Agregar jugador provisional | Soporte | Según rol local | Sí | Sí | No |
-| Remover miembro común | Soporte | Según rol local | Sí | Sí | No |
-| Nombrar o quitar admin | Soporte | Sólo como owner | Sí | No | No |
-| Transferir propiedad | Soporte | Sólo como owner | Sí | No | No |
-| Crear torneo del grupo | Soporte | Según rol local | Sí | Sí | Configurable |
-| Administrar torneo del grupo | Soporte | Según rol local | Sí | Sí | Sólo asignado |
-| Archivar/reactivar grupo | Soporte | Sólo como owner | Sí | No | No |
-| Salir del grupo | No aplica | Sí si no es owner | Tras transferir | Sí | Sí |
+| Crear grupo propio | Soporte | Sí | — | — | Sí |
+| Ver grupo activo | Soporte | Sólo si es miembro | Sí | Sí | Sí |
+| Editar grupo | Soporte | Según rol local | Sí | Sí | No |
+| Invitar por username | Soporte | Según rol local | Sí | Sí | No |
+| Crear/revocar enlace general | Soporte | Sólo como owner | Sí | No | No |
+| Agregar provisional | Soporte | Según rol local | Sí | Sí | No |
+| Remover member | Soporte | Según rol local | Sí | Sí | No |
+| Cambiar admins | Soporte | Sólo como owner | Sí | No | No |
+| Crear torneo de grupo | Soporte | Según rol local | Sí | Sí | No |
+| Administrar torneo de grupo | Soporte | Según rol local | Sí | Sí | No |
+| Archivar/reactivar | Soporte | Sólo como owner | Sí | No | No |
+| Salir | No aplica | Según rol local | Tras transferir | Sí | Sí |
 
-“Soporte” significa que el super admin puede intervenir ante abuso, pérdida de acceso o corrupción, con motivo obligatorio y registro de auditoría. No se lo incorporará como miembro visible ni se lo incluirá en estadísticas.
+“Soporte” siempre significa una Function con motivo obligatorio y auditoría. Ningún cliente, incluido el superadmin, escribe directamente nodos autoritativos.
 
-### Relación con permisos del torneo
-
-Se conservarán los roles locales del torneo:
-
-- `admin`: administra configuración, fixture, participantes y resultados;
-- `participant`: actúa como un jugador asignado;
-- `spectator`: consulta sin modificar.
-
-Para un torneo asociado a un grupo podrán administrar:
-
-- el `superAdmin`, como intervención auditada;
-- el propietario actual del grupo;
-- los administradores actuales del grupo;
-- el creador del torneo, mientras conserve acceso válido;
-- administradores adicionales asignados específicamente al torneo.
-
-Los permisos derivados del grupo serán dinámicos: si una persona deja de ser administradora del grupo, pierde esa capacidad sobre los torneos del grupo. Un permiso explícito de administrador del torneo puede conservarse hasta que un administrador autorizado lo revoque.
-
-### Recomendación sobre creación de torneos
-
-Actualmente la creación está restringida a `admin` y `superAdmin`. Para que los grupos sean autogestionables se recomienda cambiar la política:
-
-- cualquier cuenta registrada y activa puede crear un torneo independiente y queda como su propietaria;
-- owner y admins pueden crear torneos para su grupo;
-- un miembro puede crearlos sólo si el grupo lo habilita;
-- deben existir límites razonables de frecuencia para evitar abuso;
-- los usuarios anónimos, participantes por enlace y espectadores no pueden crear grupos ni torneos persistentes.
-
-Esto es una ampliación deliberada del permiso actual, no un nuevo rol global.
-
-## Visibilidad y privacidad
-
-### Visibilidad inicial recomendada
-
-Todos los grupos serán privados en la primera versión:
-
-- sólo miembros activos pueden leer el detalle, la plantilla, los torneos y las estadísticas;
-- una persona invitada recibe únicamente la información mínima necesaria para decidir si acepta;
-- un enlace de invitación no concede lectura permanente antes de ser aceptado;
-- los perfiles deportivos globales son privados por defecto y visibles para su dueño;
-- los miembros pueden ver dentro del grupo las estadísticas grupales de los demás miembros;
-- un exmiembro conserva acceso a sus estadísticas personales, pero no al contenido privado nuevo del grupo.
-
-El modelo puede reservar `visibility: "private" | "discoverable" | "link"`, pero solamente `private` quedará habilitado inicialmente. La apertura pública exige una revisión adicional de privacidad y reglas.
-
-### Datos personales
-
-- No se expondrán emails en plantillas, rankings ni invitaciones.
-- La búsqueda por username se realizará en backend sin exponer `usernameDirectory`.
-- Los links guardarán sólo tokens hasheados en el backend.
-- El nombre histórico de un torneo no debe revelar identificadores internos.
-- Las exportaciones y logs respetarán el mismo alcance que la pantalla de origen.
-
-## Miembros, invitaciones y jugadores provisionales
-
-### Invitación por usuario
-
-Flujo recomendado:
-
-1. Owner o admin busca un username exacto.
-2. Una Cloud Function resuelve la identidad sin revelar el directorio interno.
-3. Se crea una invitación con vencimiento, grupo, invitador y rol solicitado `member`.
-4. El destinatario la ve en “Mis grupos”.
-5. Al aceptar, una transacción valida que siga vigente y crea la membresía activa.
-6. La misma transacción invalida invitaciones duplicadas compatibles.
-
-No se invitará directamente como `admin`. Primero se acepta como miembro y luego el owner puede promoverlo.
-
-### Invitación por enlace
-
-- El cliente recibe un token aleatorio de alta entropía una sola vez.
-- La base guarda únicamente su hash.
-- El link tiene vencimiento y puede ser revocado.
-- Por defecto será de un único uso.
-- Aceptarlo requiere iniciar sesión o crear una cuenta.
-- La aceptación es transaccional e idempotente.
-- El grupo puede ofrecer un link multiuso sólo en una etapa posterior y con límite explícito.
-
-### Jugador provisional sin cuenta
-
-Owner o admin puede agregar un jugador mediante nombre visible. Se crea un `playerProfileId` provisional y una entrada de plantilla, pero no una cuenta ficticia ni una membresía con permisos.
-
-El jugador provisional:
-
-- puede ser seleccionado en torneos del grupo;
-- acumula estadísticas dentro del grupo;
-- no puede iniciar sesión ni leer el grupo;
-- no recibe estadísticas globales entre diferentes grupos hasta que exista una identidad confirmada;
-- puede ser desactivado de la plantilla sin perder resultados históricos.
-
-### Reclamo y vinculación de identidad
-
-Flujo recomendado:
-
-1. Un miembro registrado solicita vincular su cuenta con un jugador provisional del grupo.
-2. El sistema impide que el perfil ya esté vinculado a otra cuenta activa.
-3. Owner o admin confirma la solicitud, salvo que la invitación original ya contenga una vinculación segura preautorizada.
-4. Se conecta el `playerProfileId` existente con el UID.
-5. Se conserva todo el historial y se habilita su inclusión en estadísticas globales.
-6. La operación queda auditada y admite reversión administrativa ante un error.
-
-No se usará coincidencia de nombres como prueba de identidad.
-
-### Fusión de duplicados
-
-La fusión de perfiles es una operación delicada y se postergará. Si se incorpora:
-
-- estará limitada a super admin o a un flujo con doble confirmación;
-- conservará alias y referencias anteriores;
-- será idempotente;
-- no reescribirá silenciosamente resultados;
-- permitirá reconstruir estadísticas;
-- nunca fusionará dos cuentas activas de manera automática.
-
-## Ciclo de vida del grupo
+## Ciclo de vida
 
 ### Creación
 
-- Cualquier cuenta registrada y activa puede crear un grupo.
-- El creador se convierte en `owner` y miembro activo en una única transacción.
-- Se crea una plantilla vacía o con el perfil deportivo del creador.
-- Nombre, configuración y slug visible no se usarán como identidad autoritativa; el grupo tendrá un `groupId` opaco.
-- La creación será idempotente mediante `operationId`.
+- Cualquier cuenta registrada activa puede crear un grupo.
+- En una operación idempotente se crea el grupo, owner, membresía activa, jugador registrado local e historial inicial.
+- Backend deriva un `groupId` opaco y determinista desde UID + `operationId`; un retry llega al mismo nodo sin necesitar un receipt global previo.
+- Nombre o slug nunca son identidad autoritativa.
 
-### Salida voluntaria
+### Transferencia
 
-- Un miembro o admin puede salir.
-- Un owner debe transferir primero la propiedad.
-- La membresía pasa a estado `left`; no se elimina.
+- Sólo owner o recuperación de superadmin.
+- Destino: miembro registrado con membresía y cuenta activas.
+- La operación cambia `ownerUid` y aumenta `accessRevision`.
+- El owner anterior pasa a `admin` por defecto; la interfaz puede permitir elegir `admin` o `member` antes de confirmar.
+- Siempre queda exactamente un owner.
+
+### Salida
+
+- Member o admin puede salir sólo de un grupo activo.
+- Si tiene mutaciones de torneo en curso, la operación devuelve `GROUP_BUSY` y puede reintentarse; nunca invalida un grant ya reservado.
+- Cambia a `left`, fija `role: member`, aumenta `membershipRevision` y desactiva su jugador registrado.
 - Pierde acceso al contenido privado nuevo.
-- Conserva sus estadísticas personales y su participación histórica.
-- Puede ser invitado otra vez mediante una nueva transición auditada.
+- Conserva snapshots y estadísticas históricas del grupo.
+- Para volver necesita una invitación dirigida por username.
 
 ### Remoción
 
-- Un admin puede remover miembros comunes.
-- Sólo el owner puede remover o degradar admins.
-- Nadie puede remover al owner sin transferencia previa.
-- La remoción no borra resultados, perfiles ni auditoría.
-- Una cuenta removida pierde inmediatamente permisos derivados del grupo.
+- Owner/admin puede remover miembros comunes.
+- Sólo owner puede remover o degradar admins.
+- Si el destino tiene mutaciones de torneo en curso, devuelve `GROUP_BUSY` y debe reintentarse.
+- Cambia a `removed`, fija `role: member`, aumenta revisión y desactiva su jugador registrado.
+- Un enlace general no permite reingresar.
+- Reincorporar requiere invitación dirigida y transición auditada.
 
-### Transferencia de propiedad
+### Eliminación o desactivación de cuentas
 
-- Sólo el owner puede iniciarla, salvo recuperación por super admin.
-- El destino debe ser un miembro registrado, activo y no provisional.
-- La transferencia cambia ambos roles en una única transacción.
-- Siempre debe quedar exactamente un owner.
-- La acción exige confirmación explícita y registro de auditoría.
+- No se puede eliminar una cuenta que sea owner de uno o más grupos.
+- Debe transferir propiedad antes de eliminarse o ser eliminada por soporte.
+- El borrado de Auth no elimina membresías, jugadores locales, snapshots ni resultados.
+- La eliminación iniciada desde la aplicación y la eliminación administrativa existente consultan grupos owned y rechazan antes de tocar Auth.
+- Como Firebase Auth también puede borrarse fuera de ese flujo, un trigger `onDelete` y un reconciliador periódico son obligatorios.
+- Si desaparece un owner, el grupo pasa a `recoveryRequired`, revoca invitaciones, rechaza toda mutación y conserva lectura histórica de los demás miembros activos.
+- `orphanedOwnerUid` y `recoveryPreviousStatus` conservan la referencia y estado históricos. Superadmin sólo puede recuperar mediante Function auditada, transfiriendo a un miembro registrado activo y con motivo obligatorio; no se convierte automáticamente en owner ni obtiene lectura del contenido deportivo. El grupo vuelve a su estado previo (`active` o `archived`).
+- Si desaparece un no-owner, su membresía conserva historia con `accountStatus: deleted`, queda inaccesible y su jugador registrado se desactiva.
+- Un grupo operacional (`active` o `archived`) siempre tiene owner existente; `recoveryRequired` es la única excepción transitoria explícita.
+- La búsqueda preventiva y el reconciliador consultan `groupDomains` con índice backend por `access/ownerUid`; no dependen de `groupsByUser`, que es eventual.
+- Toda Function que pretenda mutar un grupo operacional verifica que `ownerUid` siga existiendo en Auth. Si falta, falla cerrada, encola reconciliación y no continúa aunque el trigger todavía no haya actualizado el estado.
 
-### Archivo y reactivación
+### Archivo rígido
 
-Al archivar:
+Archivar convierte el grupo en **sólo lectura**:
 
-- se bloquean nuevas invitaciones y torneos;
-- se revocan links pendientes;
-- se conserva el acceso histórico para miembros activos;
-- no se eliminan resultados ni estadísticas;
-- el owner puede reactivar el grupo;
-- el super admin puede intervenir sólo mediante recuperación auditada.
+- primero rechaza con `GROUP_BUSY` si existe un grant de torneo vigente o un provisioning pendiente; sólo finaliza cuando no queda trabajo en curso;
+- revoca el enlace general y todas las invitaciones pendientes;
+- bloquea altas, bajas, salidas, cambios de rol y edición de plantilla;
+- bloquea creación, anotación y corrección de torneos del grupo;
+- conserva lectura histórica para miembros que estaban activos al archivarse;
+- owner permanece owner y no puede salir;
+- sólo owner puede reactivar; superadmin puede hacerlo mediante recuperación auditada.
 
-La eliminación física queda fuera de la primera versión.
+“Sólo lectura” bloquea operaciones funcionales. Triggers y reconciliadores internos todavía pueden marcar cuentas borradas, cerrar grants, drenar outbox y reparar proyecciones, siempre sin cambiar resultados deportivos y con auditoría.
 
-## Torneos independientes y torneos de grupo
+Reactivar no revive invitaciones ni enlaces: el owner debe crear nuevos.
 
-### Creación independiente
+## Invitaciones
 
-- `groupId` queda ausente o `null`.
-- El creador se convierte en owner y admin del torneo.
-- Puede seleccionar perfiles deportivos conocidos o crear participantes locales.
-- Sólo los participantes vinculados de forma estable aportan a estadísticas globales.
-- Los nombres locales no vinculados siguen funcionando, pero no se agregan automáticamente a perfiles existentes.
+### Invitación dirigida por username
 
-### Creación para un grupo
+- Owner o admin busca un username exacto mediante Function no enumerable.
+- La invitación se vincula a `targetUid`, vence a los siete días y sólo concede `member`.
+- Aparece en la bandeja privada del destinatario.
+- Al aceptar, revalida grupo y owner operacionales y el límite de miembros; crea o reactiva membresía y jugador registrado en una operación idempotente. Una reactivación siempre sobrescribe `role: member`, aunque la persona haya sido admin.
+- Puede reincorporar estados `left` o `removed` porque existe una decisión administrativa dirigida.
+- Invitaciones duplicadas compatibles se invalidan en la misma transición.
 
-Flujo recomendado:
+### Enlace general multiuso rígido
 
-1. El usuario elige uno de “Mis grupos” o “Torneo independiente”.
-2. El backend valida que pueda crear torneos para ese grupo.
-3. La interfaz carga miembros y jugadores provisionales activos.
-4. Se seleccionan sólo quienes juegan esa fecha.
-5. Se aplican los valores predeterminados del grupo.
-6. El backend vuelve a validar todas las identidades y crea el torneo.
-7. Se registra el torneo en el índice histórico del grupo.
-8. Se crean referencias estables de participantes y snapshots de nombres.
+Reglas cerradas:
 
-### Snapshot de participantes
+- sólo owner crea y revoca;
+- máximo un enlace general efectivamente utilizable por grupo;
+- vencimiento fijo: siete días desde creación;
+- `maxUses` fijo: diez;
+- rol fijo: `member`;
+- requiere cuenta registrada no anónima;
+- no admite cuentas `left` o `removed`;
+- no reclama provisionales;
+- no puede editarse ni reactivarse: se revoca y crea otro;
+- archivar lo revoca;
+- el token usa 32 bytes aleatorios en base64url, se muestra una sola vez y la base guarda únicamente su SHA-256.
 
-El torneo conservará para cada índice local del fixture:
+Aceptación:
 
-- `playerProfileId`, cuando exista;
-- `displayNameSnapshot`;
-- estado provisional o registrado al momento del torneo.
+1. La URL contiene `groupId` e `invitationId` opacos; el secreto se transporta en el fragmento para evitar `Referer`.
+2. El frontend extrae el secreto, limpia la URL y lo envía por POST a la Function.
+3. La Function valida con reloj backend grupo y owner operacionales, hash, vigencia, cupo del enlace y límite de miembros activos.
+4. Si la membresía ya está activa, devuelve éxito sin consumir cupo.
+5. Si está `left` o `removed`, devuelve `REINVITE_REQUIRED`.
+6. Si nunca perteneció, crea membresía, jugador registrado, receipt y aumenta `usedCount`.
+7. El décimo ingreso agota efectivamente el enlace; la aceptación siguiente falla.
 
-El fixture puede seguir usando índices compactos internamente, pero las estadísticas y el historial resolverán esos índices mediante este mapa estable.
+`usedCount` representa incorporaciones exitosas acumuladas. No disminuye por salida o remoción. Un enlace es **utilizable** sólo cuando `status == active`, el reloj backend es anterior a `expiresAt` y `usedCount < maxUses`. Estados `expired` y `exhausted` se derivan; `revoked` es terminal persistido. Un enlace vencido o agotado no bloquea la creación de otro: la misma transacción limpia `activeGeneralInvitationId` y apunta al nuevo enlace. Nunca pueden quedar dos enlaces utilizables.
 
-### Cambio posterior de la plantilla
+Seguridad web:
 
-- Agregar o quitar miembros del grupo no cambia torneos existentes.
-- Renombrar un jugador cambia su perfil actual, no el snapshot histórico.
-- Las correcciones de participantes dentro de un torneo deben actualizar su mapa estable y recalcular contribuciones afectadas.
-- Si el torneo ya tiene resultados, se aplicarán las mismas restricciones y auditoría que para una corrección de parejas.
+- `Referrer-Policy: no-referrer`;
+- tokens prohibidos en logs, analytics, errores y auditoría;
+- comparación segura del hash;
+- respuestas no enumerables para token inválido;
+- rate limits por IP, UID, grupo e invitación;
+- la previsualización sólo devuelve nombre del grupo, invitador, vencimiento y cupos restantes.
 
-### Torneo anulado, eliminado o restaurado
+Continuidad de autenticación:
 
-- Un torneo eliminado lógicamente deja de aportar a rankings activos.
-- Restaurarlo repone su última contribución válida.
-- Anular un torneo y borrarlo son conceptos distintos: puede conservarse visible como “anulado” sin aportar estadísticas.
-- Cada transición debe reemplazar contribuciones de forma idempotente.
+- si quien abre el enlace aún no inició sesión, el frontend guarda temporalmente `groupId`, `invitationId` y secreto en `sessionStorage`, nunca en `localStorage`;
+- después de Google redirect, login o registro, retoma la aceptación en la misma pestaña;
+- el secreto se elimina al aceptar, rechazar, vencer, cerrar el flujo o recibir un error terminal;
+- el estado pendiente no se copia a analytics, URL limpia, logs ni mensajes de error.
 
-## Estadísticas
+## Plantilla
 
-### Fuente de cálculo
+- Owner/admin agrega provisionales por nombre visible.
+- Un provisional puede jugar, acumular estadísticas grupales y ser desactivado.
+- No puede iniciar sesión, ser miembro, recibir permisos ni ser reclamado en v1.
+- Un miembro registrado usa siempre su único `groupPlayerId` del grupo.
+- `players.status` de un registrado deriva de su membresía y no puede cambiarse con `setGroupPlayerStatusV1`; la activación manual sólo aplica a provisionales.
+- Owner/admin puede corregir el `displayName` local mediante `updateGroupPlayerV1`; torneos ya creados conservan su snapshot anterior.
+- No se fusionan filas por nombre.
+- La interfaz debe distinguir “Miembro con cuenta” y “Jugador sin cuenta”.
 
-Sólo cuentan partidos completos según las reglas del torneo. Esto incluye el comportamiento vigente donde un resultado terminal `4–vacío` se interpreta como `4–0`, mientras que `3–vacío` sigue incompleto cuando el objetivo es cuatro games.
+## Torneos
 
-Los partidos incompletos no aportan victorias, derrotas, games, porcentajes ni rachas.
+### Independientes
 
-### Métricas básicas por jugador
+- Continúan funcionando como actualmente.
+- No aportan a estadísticas grupales ni globales nuevas.
+- Sus nombres locales no se convierten en identidades de grupo.
 
-- torneos jugados;
+### De grupo
+
+- Sólo owner/admin actual puede crear.
+- Participantes deben ser jugadores activos de la plantilla al crear.
+- Se guardan `groupPlayerId`, `displayNameSnapshot` y tipo registrado/provisional.
+- El backend revalida permisos, grupo activo y participantes en la operación de creación.
+- Cambios posteriores de plantilla no alteran el torneo.
+
+Creación idempotente en dos pasos recuperables:
+
+1. Una transacción del grupo valida rol, estado, cupos y participantes; crea `tournamentRefs/{tournamentId}` en `provisioning`, el receipt y un grant de creación.
+2. La Function crea el torneo y sus bindings con el mismo `operationId`.
+3. Una segunda transacción confirma la referencia como `active` y cierra el grant.
+4. La respuesta exitosa se entrega sólo después de confirmar ambos lados.
+5. Un retry con igual payload retoma el paso faltante. Un reconciliador completa o revierte provisioning abandonado después del tiempo máximo de ejecución más un margen de seguridad.
+
+`groupTournamentIndex` se genera después de la confirmación y sólo sirve para enriquecer listados rápidamente. `getGroupHistoryV1` pagina primero `tournamentRefs` y usa el índice si está presente; si falta, carga el torneo y encola reparación. Una ausencia o demora del índice no cambia pertenencia, historial, permisos ni estadísticas.
+
+Autorización:
+
+- `createdByUid` es sólo auditoría.
+- Para `groupId != null`, `ownerUid` del torneo no concede acceso por sí solo.
+- Administran únicamente owner actual, admins actuales y superadmin vía Function.
+- Si owner/admin pierde su rol o membresía, ninguna operación nueva puede reservar autorización; sólo puede concluir una operación que ya hubiera obtenido un grant antes de la transición.
+- No existen admins específicos del torneo de grupo en v1.
+- `tournamentAccess` no guarda admins autoritativos de un torneo de grupo.
+- Al crear, backend genera un binding inmutable por participante registrado entre `localPlayerId`, `groupPlayerId` y `linkedUid`; un provisional no recibe binding ni puede reclamarlo.
+- En torneos de grupo se deshabilita el reclamo manual de jugadores.
+- Un member sólo anota un partido si tiene membresía activa, el binding pertenece a su UID y el `localPlayerId` aparece en ese partido.
+- Cada mutación reserva dentro del grupo un grant con `operationId`, actor, torneo, `accessRevision`, `membershipRevision`, `payloadHash` y vencimiento. Sin grant vigente, la transacción del torneo falla.
+- Salida, remoción, degradación de rol, transferencia y archivo rechazan con `GROUP_BUSY` mientras exista un grant relevante. Los grants se cierran en `finally`; los abandonados sólo se liberan tras superar el timeout máximo de la Function más margen y comprobar que no existe receipt en el torneo.
+
+En grupo `archived` o `recoveryRequired` no se crean, anotan, corrigen, anulan, eliminan ni restauran torneos hasta reactivar o completar la recuperación.
+
+## Estadísticas grupales básicas
+
+### Fuente
+
+Las Functions enumeran exclusivamente `groupDomains/{groupId}/tournamentRefs` autoritativas confirmadas, cargan esos torneos y calculan bajo demanda. `groupTournamentIndex` sólo acelera la pantalla de historial y nunca decide qué cuenta. No existen `groupStats`, `playerStats` ni `statsContributions` persistentes en v1.
+
+Sólo cuentan partidos completos según las reglas del torneo. El score terminal `4–vacío` se normaliza como `4–0` cuando cuatro es el objetivo; `3–vacío` permanece incompleto.
+
+Predicado de inclusión:
+
+- la referencia debe estar `active` y el torneo debe existir con el mismo `groupId`;
+- torneos en `provisioning`, soft-deleted o anulados no cuentan;
+- restaurar un torneo lo vuelve a incluir;
+- una aparición cuenta cuando el jugador está en el snapshot de un torneo incluido, aunque todavía no tenga partidos completos;
+- victorias, derrotas y games sólo cuentan partidos completos y no empatados;
+- si una referencia y su torneo divergen, la respuesta falla completa con `STATS_SOURCE_INCONSISTENT`, dispara reconciliación y nunca omite silenciosamente el torneo.
+
+### Métricas
+
+Por `groupPlayerId`:
+
+- apariciones en torneos;
+- torneos con al menos un partido completo;
 - partidos jugados;
 - victorias y derrotas;
 - games a favor y en contra;
 - diferencia de games;
-- porcentaje de victorias;
-- mejor racha de victorias;
-- participación o asistencia;
-- primeros puestos o torneos ganados, cuando el formato permita determinarlo;
-- fecha del primer y último torneo computado.
+- porcentaje `victorias / partidos completos` con denominador visible.
 
-Definiciones recomendadas:
+No se calculan en v1 rachas, parejas, rivales, torneos ganados, logros, evolución ni estadísticas entre grupos.
 
-- “Torneo jugado” exige al menos un partido completo de ese jugador.
-- “Asistencia” indica que fue incluido en la lista del torneo aunque no haya completado partidos.
-- El porcentaje de victorias usa `victorias / partidos completos`.
-- Todo porcentaje se muestra junto con su denominador.
-- Los empates, si una configuración futura los permite, se contabilizan por separado y no como derrota.
+### Ranking básico
 
-### Estadísticas del grupo
+1. victorias;
+2. diferencia de games;
+3. games a favor;
+4. porcentaje de victorias;
+5. nombre sólo como orden estable final.
 
-Incluyen únicamente torneos cuyo `groupId` coincide con el grupo y que no están anulados ni eliminados.
+La vista permite filtrar plantilla activa o historial completo. La pertenencia y estado actual no alteran resultados históricos.
 
-El grupo podrá mostrar:
+### Límites de cálculo
 
-- ranking histórico;
-- torneos y partidos jugados por miembro;
-- victorias, derrotas y porcentaje;
-- games a favor, en contra y diferencia;
-- mejor racha;
-- compañero más frecuente;
-- pareja con mejores resultados, con mínimo de partidos visible;
-- rival más frecuente;
-- últimos torneos;
-- participación de miembros activos e históricos.
+- consultas paginadas de `tournamentRefs`, en lotes de 25, y lectura validada de cada torneo;
+- máximo v1 de 250 referencias de torneo totales por grupo, incluyendo soft-deleted y canceladas, para mantener acotados historial y transacciones;
+- los torneos de grupo conservan los límites actuales de 4–16 participantes y agregan un máximo v1 de 40 rondas;
+- los límites se controlan al crear o ampliar un torneo, no recién al consultar estadísticas;
+- la interfaz avisa al llegar al 80 % y bloquea nuevas altas al alcanzar el máximo, sin romper historial ni estadísticas existentes;
+- máximo de 100 jugadores locales totales y 50 membresías efectivamente activas por grupo; desactivar una fila no libera el cupo histórico de jugador;
+- los límites por grupo se aplican en su transacción autoritativa con códigos estables; rate limits por UID/IP/App Check y alertas de costo controlan creación abusiva de grupos sin introducir un contador global distribuido en v1;
+- antes del feature flag productivo, una prueba de carga debe demostrar el cálculo del máximo permitido dentro del timeout; si no lo cumple, se reduce el límite de torneos, nunca se publica una configuración que falle al consultarse;
+- ningún resultado parcial se presenta como completo;
+- caché sólo de respuesta corta y descartable, nunca fuente autoritativa.
 
-Los exmiembros permanecen en rankings históricos con una etiqueta de estado. Por defecto no aparecen en la plantilla de selección ni en un ranking filtrado a “miembros actuales”.
+La materialización incremental y reconstrucción avanzada pertenecen a v2.
 
-### Estadísticas globales
+## Modelo de datos v1
 
-Incluyen todos los torneos válidos donde el participante se encuentre vinculado al mismo `playerProfileId`, sean independientes o de grupo.
-
-El dueño del perfil podrá ver:
-
-- totales globales;
-- desglose por grupo;
-- historial cronológico;
-- parejas y rivales frecuentes;
-- evolución futura por temporada.
-
-Un jugador provisional acumula contribuciones identificables, pero su vista global no se expone hasta vincularlo con una cuenta. Al vincularse, las contribuciones existentes se vuelven visibles sin volver a sumar resultados.
-
-### Ranking
-
-Para la primera versión se conservará un criterio transparente, similar al torneo actual:
-
-1. mayor cantidad de victorias;
-2. mayor diferencia de games;
-3. mayor cantidad de games a favor;
-4. mayor porcentaje de victorias si continúa el empate;
-5. nombre visible sólo como último orden estable, no como mérito deportivo.
-
-La interfaz debe permitir filtrar miembros activos o historial completo y mostrar el volumen de partidos. Un rating Elo se evaluará después de contar con suficientes datos y una definición aprobada para parejas rotativas.
-
-### Parejas y rivales
-
-Cada partido completo produce:
-
-- una participación por jugador;
-- una relación de compañero para cada integrante de la pareja;
-- dos relaciones de rival por cada cruce;
-- una contribución de resultado y games.
-
-Las claves de pareja se normalizarán ordenando ambos `playerProfileId` para evitar duplicar `A+B` y `B+A`.
-
-### Rachas
-
-- Se calculan cronológicamente por fecha efectiva del torneo y orden de ronda/partido.
-- Si dos torneos tienen la misma fecha, se usa `createdAt` y luego un identificador estable como desempate.
-- Una derrota o empate corta la racha de victorias.
-- Un partido incompleto no inicia ni corta rachas.
-- Una corrección histórica obliga a reconstruir la racha afectada; no puede resolverse sólo con sumas acumulativas.
-
-### Estadísticas derivadas y reconstrucción
-
-Se recomienda guardar una contribución normalizada por torneo:
+Las ramas autoritativas que deben cambiar condicionalmente se agrupan por `groupId` para evitar transacciones sobre la raíz completa.
 
 ```text
-statsContributions/{tournamentId}
-  sourceRevision
-  groupId
-  status
-  players/{playerProfileId}
-    tournaments
-    appearances
-    played
-    wins
-    losses
-    draws
-    gamesFor
-    gamesAgainst
-    partners/{otherPlayerProfileId}
-    opponents/{otherPlayerProfileId}
-  chronologicalMatches/{matchId}
-```
-
-Los agregados globales y grupales se construyen reemplazando la contribución anterior de ese torneo por la nueva. Nunca se aplica una contribución dos veces. Cada agregado incluirá `statsVersion` y podrá reconstruirse desde torneos válidos.
-
-Las rachas e historiales cronológicos deben reconstruirse desde eventos ordenados, aunque los totales simples puedan actualizarse por diferencias.
-
-## Configuración del grupo
-
-Configuraciones iniciales útiles:
-
-- `membersCanCreateTournaments`, por defecto `false`;
-- cantidad habitual de canchas;
-- objetivo habitual de games;
-- modo habitual de parejas;
-- cantidad habitual de rondas;
-- nombre o prefijo sugerido para torneos;
-- visibilidad, inicialmente fija en `private`;
-- zona horaria, usando por defecto la del creador;
-- filtro predeterminado de ranking: miembros activos o histórico.
-
-Estas opciones son valores iniciales para un torneo nuevo. Cambiarlas no modifica torneos existentes.
-
-## Modelo de datos propuesto
-
-La forma exacta podrá ajustarse durante la implementación, pero deberá preservar estas responsabilidades y límites de lectura.
-
-```text
-groups/{groupId}/public
+groupDomains/{groupId}
   schemaVersion
   profile
     name
     description
-    avatarUrl
-    visibility
+    visibility              # private
   metadata
-    status                   # active | archived
+    status                  # active | archived | recoveryRequired
+    statusRevision
     createdAt
     updatedAt
     archivedAt
-  settings
-    membersCanCreateTournaments
-    defaultTournament
-      numCourts
-      gamesPerSet
-      pairingMode
-      numRounds
-    timezone
-
-groups/{groupId}/_server
-  operationReceipts/{operationId}
-
-groupAccess/{groupId}
-  ownerUid                   # única fuente autoritativa de propiedad
-  members/{uid}
-    role                     # admin | member; owner se deriva de ownerUid
-    status                   # active | left | removed
-    playerProfileId
-    joinedAt
-    updatedAt
-    leftAt
-    removedAt
-  invitationHashes/{hash}
-    type                     # username | link
-    targetUid
-    role                     # member en v1
-    status
-    invitedByUid
-    expiresAt
+    creationOperationId
+    creationPayloadHash
+    orphanedOwnerUid        # sólo recoveryRequired
+    recoveryPreviousStatus  # active | archived; sólo recoveryRequired
+  access
+    ownerUid
+    accessRevision
+    activeGeneralInvitationId
+    members/{uid}
+      role                  # admin | member; owner derivado
+      status                # active | left | removed
+      accountStatus         # active | deleted
+      groupPlayerId
+      membershipRevision
+      firstJoinedAt
+      activatedAt
+      updatedAt
+  players/{groupPlayerId}
+    displayName
+    kind                    # registered | provisional
+    status                  # active | inactive
+    linkedUid               # sólo registered
     createdAt
-  accessRevision
-  activity/{activityId}
+    updatedAt
+  invitations/{invitationId}
+    type                    # username | generalMultiuse
+    targetUid               # sólo username
+    tokenHash               # sólo generalMultiuse
+    status                  # active | accepted | rejected | revoked
+    maxUses                 # 1 o 10
+    usedCount
+    expiresAt
+    createdByUid
+    createdAt
+    acceptedUids/{uid}
+      acceptedAt
+      membershipRevision
+  tournamentRefs/{tournamentId}
+    status                  # provisioning | active | deleted | cancelled
+    creationOperationId
+    createdAt
+    activatedAt
+    updatedAt
+  operationGrants/{operationId}
+    type
+    actorUid
+    targetUid
+    tournamentId
+    accessRevision
+    membershipRevision
+    payloadHash
+    expiresAt
+    status                  # reserved | completed | failed
+  operationReceipts/{actorUid}/{operationName}/{operationId}
+    payloadHash
+    resultRef
+    createdAt
+  outbox/{eventId}
+    type
+    payload
+    createdAt
+```
 
+`groupDomains/{groupId}` no es legible como unidad por ningún cliente. Grants, hashes, receipts y outbox son exclusivamente backend. Invitaciones terminales se purgan a los 30 días; receipts ofrecen idempotencia durante 30 días con el límite cuantitativo indicado abajo; grants completados se purgan después de siete días. La outbox debe permanecer normalmente vacía y genera alerta si un evento no se publica.
+
+Se conservan como máximo 200 receipts por actor y tipo de operación: la garantía cubre 30 días o las últimas 200 operaciones, lo que se alcance primero, y este contrato se comunica al cliente. Las invitaciones dirigidas pendientes se limitan a 100 por grupo. Ninguna purga elimina referencias de torneos, membresías, jugadores ni auditoría publicada.
+
+Auditoría append-only separada del límite transaccional:
+
+```text
+groupAudit/{groupId}/{eventId}
+  type
+  actorUid
+  targetUid
+  membershipRevision
+  roleBefore
+  roleAfter
+  metadataSanitized
+  createdAt
+```
+
+La transición autoritativa y su evento de outbox nacen en la misma transacción. Un worker idempotente publica `groupAudit` y proyecciones y luego elimina el evento. La auditoría no contiene tokens, hashes ni payloads sensibles y sólo se entrega mediante una vista paginada y filtrada.
+
+`listGroupAuditV1` admite owner/admin actuales, orden descendente, cursor opaco y páginas de hasta 50 eventos. Member y exmiembro no acceden a auditoría; superadmin requiere modo soporte y motivo obligatorio.
+
+Proyecciones reconstruibles:
+
+```text
 groupsByUser/{uid}/{groupId}
-  role                       # rol efectivo denormalizado para listado
+  effectiveRole
   status
   updatedAt
 
@@ -730,654 +585,337 @@ groupInvitationInbox/{uid}/{invitationId}
   expiresAt
   status
 
-groupPlayers/{groupId}/{playerProfileId}
-  displayNameSnapshot
-  kind                     # registered | provisional
-  status                   # active | inactive
-  linkedUid
-  addedAt
-  updatedAt
-
-playerProfiles/{playerProfileId}
-  displayName
-  ownerUid
-  status                   # provisional | linked | merged
-  createdAt
-  updatedAt
-
-playerProfileByUser/{uid}
-  playerProfileId
-
 groupTournamentIndex/{groupId}/{tournamentId}
   tournamentNameSnapshot
   tournamentDate
   status
   updatedAt
-
-playerTournamentIndex/{playerProfileId}/{tournamentId}
-  groupId
-  tournamentDate
-  status
-  updatedAt
-
-groupStats/{groupId}
-  statsVersion
-  sourceRevision
-  players/{playerProfileId}
-
-playerStats/{playerProfileId}
-  statsVersion
-  global
-  groups/{groupId}
 ```
 
-### Extensión del torneo
-
-El documento público del torneo agregará:
+Extensión del torneo:
 
 ```text
+tournamentAccess/{tournamentId}
+  mode                      # independent | group
+  groupId                   # sólo group
+  claims/{localPlayerId}
+    uid
+    source                  # group
+    groupPlayerId
+
 tournaments/{tournamentId}/public/metadata
-  groupId                  # null o un único grupo
+  groupId                   # null o groupId
   createdByUid
 
-tournaments/{tournamentId}/public/state
-  participantRefs/{localPlayerId}
-    playerProfileId
-    displayNameSnapshot
-    groupMembershipStatusSnapshot
+tournaments/{tournamentId}/public/state/participantRefs/{localPlayerId}
+  groupPlayerId
+  displayNameSnapshot
+  playerKindSnapshot
 ```
 
-`ownerUid` seguirá representando propiedad administrativa del torneo. `createdByUid` permite conservar quién lo creó aunque cambie la propiedad o administración.
+En un torneo de grupo, `claims` se genera y corrige sólo por backend desde la plantilla; el endpoint público de claim devuelve `FORBIDDEN`. `members` y admins históricos de `tournamentAccess` no conceden permisos para modo `group`.
 
-En los grupos, en cambio, la propiedad autoritativa vive en `groupAccess/{groupId}/ownerUid`. Cualquier resumen de grupo que incluya el owner será una proyección derivada y deberá actualizarse en la misma operación transaccional.
+`groupDomains/{groupId}` es el límite transaccional de membresías, invitaciones, referencias y grants. El contenido pesado del torneo permanece separado, pero toda mutación requiere primero un grant vigente. `groupsByUser`, inbox e índice de torneos se actualizan mediante outbox idempotente y disponen de reconciliación. Una proyección nunca concede permisos ni define estadísticas: Functions y Rules consultan la fuente autoritativa.
 
-### Datos privados y públicos
+## Idempotencia, concurrencia y tiempo
 
-- `groups/{groupId}/public` es “público” sólo dentro del grupo autorizado; no significa acceso anónimo.
-- `groupAccess`, hashes, operaciones internas y vínculos sensibles no son legibles directamente por clientes.
-- Los índices por usuario exponen sólo datos necesarios para construir “Mis grupos”.
-- Los agregados se entregan mediante lecturas filtradas o Functions, nunca mediante acceso global a todos los jugadores.
-- Los emails y el directorio de usernames permanecen privados.
+- `operationId` se combina con actor y operación.
+- Cada receipt guarda `payloadHash`; reutilizar el ID con otro payload falla.
+- Todas las fechas sensibles usan reloj backend.
+- Invitaciones calculan vigencia desde `expiresAt`, no desde un `status` potencialmente obsoleto.
+- Transiciones comparan revisiones esperadas.
+- El último cupo, membresía, jugador local y receipt se confirman en la misma transacción del grupo.
+- La reserva del grant es el punto de orden de una mutación de torneo respecto de cambios de rol, salida, remoción, transferencia y archivo.
+- Una operación que obtuvo grant primero puede concluir; una transición incompatible no se confirma mientras ese grant siga vigente y devuelve `GROUP_BUSY`.
+- Para bloquear transiciones, todo grant `reserved` cuenta aunque `expiresAt` haya pasado; sólo el reconciliador puede cerrarlo tras el chequeo seguro. El vencimiento por sí solo nunca autoriza archivo, salida o remoción.
+- La Function comprueba nuevamente el grant y su reloj justo antes de la transacción del torneo, guarda el `operationId` en el receipt del torneo y después lo cierra en el grupo.
+- El tiempo de vida del grant supera el timeout máximo configurado de la Function más un margen; no se libera por reloj antes de que esa ejecución ya no pueda escribir.
+- El reconciliador sólo marca un grant abandonado después de revisar el receipt del torneo: si existe lo completa, y si no existe lo falla y libera.
+- Proyecciones fallidas se reintentan y pueden reconstruirse.
+- La aceptación general, la invitación dirigida y el provisioning de torneos tienen tests de crash/retry entre cada paso durable.
+- Los límites y políticas de retención definidos en este documento forman parte de la configuración backend y de las pruebas.
 
-## Cloud Functions y dominio confiable
-
-Todas las mutaciones de membresía, identidad, permisos, invitaciones e índices se realizarán en backend. Nombres tentativos:
+## Cloud Functions tentativas
 
 - `createGroupV1`;
 - `updateGroupV1`;
-- `archiveGroupV1` / `restoreGroupV1`;
-- `createGroupInvitationV1`;
-- `acceptGroupInvitationV1`;
-- `rejectGroupInvitationV1`;
-- `revokeGroupInvitationV1`;
+- `archiveGroupV1`;
+- `restoreGroupV1`;
+- `transferGroupOwnershipV1`;
+- `inviteGroupUserV1`;
+- `acceptGroupUserInvitationV1`;
+- `rejectGroupUserInvitationV1`;
+- `createGeneralGroupLinkV1`;
+- `revokeGeneralGroupLinkV1`;
+- `previewGeneralGroupLinkV1`;
+- `acceptGeneralGroupLinkV1`;
 - `addProvisionalGroupPlayerV1`;
-- `requestPlayerLinkV1`;
-- `approvePlayerLinkV1`;
-- `updateGroupMemberRoleV1`;
+- `updateGroupPlayerV1`;
+- `setGroupPlayerStatusV1`;
+- `setGroupMemberRoleV1`;
 - `removeGroupMemberV1`;
 - `leaveGroupV1`;
-- `transferGroupOwnershipV1`;
 - `listMyGroupsV1`;
 - `getGroupV1`;
+- `getGroupHistoryV1`;
 - `getGroupStatsV1`;
-- `getPlayerStatsV1`;
-- extensión de `createTournamentV2` para aceptar `groupId` y participantes estables.
+- `listMyFormerGroupsV1`;
+- `getMyHistoricalGroupStatsV1`;
+- `listGroupAuditV1`;
+- trigger de Auth `onDelete` y `reconcileGroupDomainsV1` programada;
+- extensión de `createTournamentV2` y mutaciones para autorización por grupo.
 
-Los nombres finales podrán agruparse, pero cada operación deberá:
+La reserva y cierre de grants son helpers internos, no endpoints públicos. Todas las mutaciones autoritativas pasan por Functions. Database Rules deniegan escrituras directas incluso al superadmin.
 
-- exigir autenticación registrada cuando corresponda;
-- validar rol global y rol local por separado;
-- validar estado activo de grupo, membresía e invitación;
-- usar `operationId` para idempotencia;
-- operar transaccionalmente sobre entidad, acceso e índices relacionados;
-- rechazar revisiones obsoletas;
-- registrar actor, acción, objetivo y timestamp;
-- devolver errores de dominio estables sin filtrar datos privados.
+## Rules y privacidad
 
-## Realtime Database Rules
-
-Las reglas conservarán denegación por defecto.
-
-Se probará como mínimo:
-
-- un usuario no autenticado no puede listar grupos ni perfiles;
-- un usuario registrado sólo ve sus invitaciones y grupos activos;
-- un miembro no puede leer otro grupo privado;
-- un miembro no puede promoverse ni alterar `groupAccess`;
-- un admin global sin membresía no puede leer ni administrar un grupo;
-- un admin de grupo no puede transferir propiedad ni remover al owner;
-- un owner no puede crear un estado sin propietario;
-- una invitación vencida, revocada o ya usada no puede aceptarse;
-- un token de invitación no puede leerse desde la base;
-- un jugador provisional no obtiene permisos de cuenta;
-- un exmiembro pierde lectura del contenido nuevo;
-- group owner/admin puede administrar torneos del grupo;
-- un miembro sólo puede crear torneos si la configuración lo permite;
-- el super admin puede intervenir sin convertirse en miembro y la Function registra la acción;
-- ningún cliente puede escribir estadísticas agregadas ni índices autoritativos.
-
-Aunque las escrituras principales pasen por Functions, las Rules deben impedir toda escritura directa a nodos derivados o sensibles.
+- usuario anónimo no lista grupos, plantilla ni estadísticas;
+- cuenta registrada sólo lista sus proyecciones;
+- no existe `.read` cliente en `groupDomains/{groupId}`, `access`, `invitations`, `operationGrants`, receipts, outbox ni `groupAudit`;
+- `getGroupV1`, historial, estadísticas y auditoría devuelven DTOs con allowlist; nunca serializan el snapshot autoritativo completo;
+- lectura detallada exige membresía activa o acceso histórico permitido y se resuelve en backend contra el grupo autoritativo;
+- admin global no obtiene acceso sin rol local;
+- miembros no escriben roles, invitaciones, plantilla, índices ni estadísticas;
+- grupos archivados rechazan toda mutación funcional excepto restauración por Function; sólo se permiten tareas internas de integridad expresamente enumeradas;
+- tokens, hashes, receipts y auditoría no son legibles por clientes;
+- superadmin interviene sólo por Functions auditadas;
+- en modo `group`, ni siquiera superadmin obtiene lectura cliente directa del torneo por claim global; soporte usa vistas auditadas con motivo;
+- datos de un grupo nunca autorizan otro grupo;
+- exmiembros sólo acceden a su participación y estadísticas personales históricas mediante una vista filtrada, no al contenido privado nuevo;
+- las lecturas públicas actuales de torneos consultan `mode`: para torneos de grupo requieren membresía activa autoritativa o la vista histórica personal; una entrada estática en `tournamentAccess.members` nunca alcanza.
 
 ## Experiencia de usuario
 
-### Navegación principal
+### Mis grupos
 
-Agregar una entrada “Mis grupos” con:
+- activos;
+- archivados;
+- anteriores, con acceso únicamente a participación y estadísticas personales;
+- invitaciones dirigidas pendientes;
+- crear grupo.
 
-- grupos activos;
-- grupos archivados;
-- invitaciones pendientes;
-- botón “Crear grupo”.
+### Grupo
 
-La creación de torneo comenzará con una elección explícita:
+1. Resumen.
+2. Jugadores.
+3. Torneos.
+4. Estadísticas básicas.
+5. Invitaciones, sólo owner/admin.
+6. Configuración.
 
-- “Torneo independiente”;
-- uno de los grupos donde el usuario tiene permiso de creación.
+La plantilla diferencia visualmente miembros con cuenta y jugadores sin cuenta. No muestra una acción “Reclamar” en v1.
 
-### Detalle del grupo
+El owner ve “Crear enlace general”, con texto fijo: “10 ingresos · vence en 7 días”. Si ya existe uno activo, sólo puede copiar el token durante la creación original o revocarlo y generar otro.
 
-Pestañas recomendadas:
+Un grupo archivado muestra un banner de sólo lectura y oculta o deshabilita toda acción salvo “Reactivar” para owner.
 
-1. **Resumen**: última actividad, próximo acceso rápido y últimos torneos.
-2. **Jugadores**: miembros activos, provisionales y exmiembros históricos.
-3. **Torneos**: historial ordenado y filtros.
-4. **Estadísticas**: ranking y métricas del grupo.
-5. **Invitaciones**: visibles para owner/admin.
-6. **Configuración**: según permisos.
+Un grupo `recoveryRequired` muestra un banner de recuperación, no expone contenido nuevo ni permite mutaciones. Los miembros ven que soporte debe reasignar propiedad; sólo superadmin accede al comando auditado de recuperación.
 
-### Perfil del jugador
+Si una transición devuelve `GROUP_BUSY`, la interfaz explica que hay una operación de torneo finalizando y ofrece reintentar; nunca presenta la salida, remoción o archivo como completados.
 
-- resumen global;
-- desglose por grupo;
-- historial cronológico;
-- parejas y rivales frecuentes;
-- visibilidad clara de la cantidad de partidos detrás de cada porcentaje;
-- estado de vinculación si todavía es provisional.
-
-### Estados y errores
-
-La interfaz debe explicar:
-
-- por qué una persona no puede crear un torneo;
-- que salir no borra su historial;
-- que transferir propiedad es obligatorio antes de salir;
-- cuándo una invitación venció o fue revocada;
-- que una vinculación de jugador necesita aprobación;
-- cuándo las estadísticas están recalculándose;
-- por qué un torneo incompleto no aporta determinadas métricas.
-
-Todos los flujos deben validarse en celular y admitir reintentos sin duplicar grupos, invitaciones o contribuciones.
-
-## Compatibilidad y migración
-
-### Cuentas actuales
-
-- `superAdmin`, `admin` y usuarios registrados conservan sus roles actuales.
-- No se promoverá ninguna cuenta por crear o administrar un grupo.
-- Se creará un `playerProfileId` de forma perezosa cuando el usuario use por primera vez funciones deportivas persistentes.
-- Los admins actuales podrán crear grupos igual que un usuario común.
-
-### Torneos actuales
-
-- Todo torneo existente se interpreta como independiente con `groupId: null`.
-- Sus jugadores locales continúan funcionando sin migración obligatoria.
-- No se inferirán perfiles por nombre.
-- Los resultados anteriores no aparecerán automáticamente en estadísticas globales.
-- Una herramienta de vinculación retroactiva puede diseñarse más adelante con revisión y auditoría.
-
-### Corte de versión
-
-- El schema del torneo se extenderá de forma compatible o mediante una nueva versión explícita.
-- Clientes antiguos no deben poder crear torneos de grupo incompletos.
-- Functions validarán versión y campos obligatorios.
-- El despliegue se ordenará para que backend y reglas acepten primero el estado compatible, luego se publique la interfaz y finalmente se active la funcionalidad.
-- Debe existir un feature flag o condición equivalente durante el corte si backend y frontend no pueden desplegarse atómicamente.
-
-### Reconstrucción y rollback
-
-- Los agregados estadísticos deben regenerarse desde torneos fuente.
-- Desactivar temporalmente la interfaz de grupos no debe afectar torneos independientes.
-- El rollback no eliminará nodos nuevos; una versión anterior simplemente los ignorará.
-- Una migración destructiva requerirá respaldo exportable y un plan independiente.
+Las pantallas de plantilla y torneos muestran el consumo de límites desde el 80 %. Alcanzar un límite no oculta ni invalida contenido existente.
 
 ## Etapas de implementación
 
-### 0. Planificación y decisiones finales
-
-Estado: `[~]` En curso.
-
-- `[x]` Documentar alcance, roles, permisos, identidades y estadísticas.
-- `[x]` Recomendar grupos privados y un único grupo por torneo.
-- `[x]` Recomendar roles locales `owner`, `admin` y `member`.
-- `[x]` Recomendar que usuarios comunes puedan crear torneos propios.
-- `[x]` Definir el login/alta Google como prerrequisito de grupos.
-- `[x]` Confirmar fuera del repositorio el único email autorizado para super admin.
-- `[ ]` Confirmar si miembros comunes pueden crear torneos por defecto. Recomendación: no.
-- `[ ]` Confirmar el período de vencimiento de invitaciones. Recomendación: siete días.
-- `[ ]` Confirmar si exmiembros ven el historial completo anterior. Recomendación: sólo sus estadísticas personales, no el grupo privado.
-- `[ ]` Confirmar criterio exacto de “torneo ganado” para cada formato.
-- `[ ]` Confirmar si el ranking inicial incluye exmiembros por defecto. Recomendación: sólo activos, con filtro histórico.
-
-Criterio de finalización: decisiones pendientes confirmadas y modelo aprobado antes de implementar datos persistentes.
-
-Commit: `Add groups and statistics implementation plan`.
-
-### 0A. Login público con Google y super admin único
-
-Estado: `[~]` Implementación local completada; falta despliegue y verificación productiva antes de iniciar grupos.
-
-- `[x]` Modelar el UID canónico del único super admin.
-- `[x]` Endurecer Functions y Rules para exigir claim y UID canónico.
-- `[x]` Mantener el email confirmado únicamente en el secreto backend `SUPER_ADMIN_EMAIL`.
-- `[x]` Exigir proveedor Google y email verificado para el bootstrap.
-- `[x]` Implementar provisionamiento idempotente de cuentas Google comunes.
-- `[x]` Crear perfil `user` sin custom claim global para altas nuevas.
-- `[x]` Preservar claims `admin` legítimas al vincular o usar Google.
-- `[x]` Resolver colisiones de proveedor sin crear cuentas o perfiles duplicados.
-- `[x]` Corregir mensajes y estados de la interfaz para usuarios Google comunes.
-- `[ ]` Probar recuperación si cambia el UID de la cuenta super admin.
-- `[x]` Probar que otra cuenta con claim obsoleta no puede ejercer super admin.
-- `[ ]` Desplegar y verificar con dos cuentas Google distintas.
-
-Criterio de finalización: cualquier usuario puede registrarse o ingresar con Google como `user`, mientras sólo el UID canónico correspondiente a `SUPER_ADMIN_EMAIL` puede ejercer `superAdmin` en Functions y Database Rules.
-
-Commit: `Add public Google sign-in and unique super admin`.
-
-### 1. Dominio de identidades, grupos y permisos
-
-Estado: `[ ]` Pendiente.
-
-- `[ ]` Crear modelos puros para perfil deportivo, grupo, membresía e invitación.
-- `[ ]` Definir errores de dominio tipados.
-- `[ ]` Implementar matrices de autorización puras y exhaustivas.
-- `[ ]` Definir transiciones válidas de membresía y grupo.
-- `[ ]` Modelar transferencia de propiedad con exactamente un owner.
-- `[ ]` Definir IDs opacos, revisiones y operación idempotente.
-- `[ ]` Probar normalización de nombres sin usarla como identidad.
-
-Criterio de finalización: las invariantes pueden probarse sin Firebase ni interfaz.
-
-Commit: `Add group identity and permission domain`.
-
-### 2. Persistencia segura y operaciones de grupo
-
-Estado: `[ ]` Pendiente.
-
-- `[ ]` Crear nodos de grupos, accesos, perfiles e índices.
-- `[ ]` Implementar creación, edición, archivo y restauración.
-- `[ ]` Implementar transferencia de propiedad, salida y remoción.
-- `[ ]` Implementar índices “grupos por usuario” de manera transaccional.
-- `[ ]` Incorporar auditoría e idempotencia.
-- `[ ]` Agregar Functions y pruebas unitarias/de integración.
-- `[ ]` Agregar Rules con denegación por defecto.
-
-Criterio de finalización: backend y emuladores permiten administrar un grupo sin exponer nodos privados ni depender de controles de interfaz.
-
-Commit: `Add secure group lifecycle backend`.
-
-### 3. Invitaciones y plantilla de jugadores
-
-Estado: `[ ]` Pendiente.
-
-- `[ ]` Implementar invitación por username exacto.
-- `[ ]` Implementar links hasheados, revocables y con vencimiento.
-- `[ ]` Crear bandeja privada de invitaciones.
-- `[ ]` Implementar aceptación, rechazo y revocación idempotentes.
-- `[ ]` Implementar jugadores provisionales sin cuenta.
-- `[ ]` Implementar activación/desactivación de jugadores de plantilla.
-- `[ ]` Probar invitaciones simultáneas, duplicadas y vencidas.
-
-Criterio de finalización: un grupo puede construir su plantilla con usuarios y jugadores provisionales sin conceder permisos incorrectos.
-
-Commit: `Add group invitations and reusable roster`.
-
-### 4. Interfaz “Mis grupos” y administración
-
-Estado: `[ ]` Pendiente.
-
-- `[ ]` Crear listado de grupos e invitaciones.
-- `[ ]` Crear flujo de alta y edición.
-- `[ ]` Crear detalle con resumen, jugadores, torneos, estadísticas y configuración.
-- `[ ]` Aplicar controles según rol local.
-- `[ ]` Implementar transferencia, salida, remoción y archivo con confirmación.
-- `[ ]` Optimizar navegación y controles táctiles para celular.
-- `[ ]` Probar estados vacíos, carga, error, reintento y permisos revocados durante la sesión.
-
-Criterio de finalización: cada rol entiende qué puede hacer y todas las prohibiciones también son rechazadas por backend.
-
-Commit: `Add group management experience`.
-
-### 5. Perfiles deportivos y vinculación
-
-Estado: `[ ]` Pendiente.
-
-- `[ ]` Crear perfiles deportivos estables para usuarios y provisionales.
-- `[ ]` Crear vínculo único UID ↔ perfil deportivo.
-- `[ ]` Implementar solicitud y aprobación de reclamo.
-- `[ ]` Añadir auditoría y reversión controlada.
-- `[ ]` Resolver la relación con player claims dentro de cada torneo.
-- `[ ]` Probar homónimos, renombres, cuentas duplicadas y reclamos concurrentes.
-
-Criterio de finalización: cambiar nombres o vincular una cuenta no altera la identidad histórica ni duplica resultados.
-
-Commit: `Add persistent player identities`.
-
-### 6. Creación de torneos independientes y de grupo
-
-Estado: `[ ]` Pendiente.
-
-- `[ ]` Permitir creación independiente a usuarios registrados activos.
-- `[ ]` Extender la creación con `groupId` opcional.
-- `[ ]` Validar permiso local y estado del grupo en backend.
-- `[ ]` Seleccionar jugadores desde la plantilla activa.
-- `[ ]` Guardar participant refs y snapshots.
-- `[ ]` Aplicar configuraciones predeterminadas sin vincularlas al torneo después de creado.
-- `[ ]` Crear el índice de torneos del grupo transaccionalmente.
-- `[ ]` Adaptar administración de torneos a permisos derivados del grupo.
-- `[ ]` Mantener compatibilidad con links y torneos independientes existentes.
-
-Criterio de finalización: un torneo de grupo es inequívoco, conserva sus participantes históricos y no puede crearse mediante una membresía insuficiente.
-
-Commit: `Add group-scoped tournament creation`.
-
-### 7. Historial y contribuciones estadísticas
-
-Estado: `[ ]` Pendiente.
-
-- `[ ]` Extraer una contribución normalizada desde cada torneo.
-- `[ ]` Usar únicamente partidos completos y scores normalizados.
-- `[ ]` Implementar reemplazo idempotente por revisión.
-- `[ ]` Crear índices por grupo y perfil deportivo.
-- `[ ]` Resolver correcciones, anulaciones, borrado y restauración.
-- `[ ]` Implementar reconstrucción completa verificable.
-- `[ ]` Comparar agregados incrementales contra recálculo desde cero.
-
-Criterio de finalización: repetir una operación, corregir un score o restaurar un torneo nunca duplica estadísticas.
-
-Commit: `Add rebuildable tournament statistics`.
-
-### 8. Estadísticas globales y por grupo
-
-Estado: `[ ]` Pendiente.
-
-- `[ ]` Implementar métricas básicas, ranking y denominadores.
-- `[ ]` Implementar desglose global y por grupo.
-- `[ ]` Implementar parejas y rivales frecuentes.
-- `[ ]` Implementar rachas cronológicas reconstruibles.
-- `[ ]` Mostrar activos e históricos con filtros claros.
-- `[ ]` Crear pantallas de estadísticas del grupo y perfil.
-- `[ ]` Definir estados de actualización o reconstrucción.
-- `[ ]` Validar que un provisional vinculado conserva sus números sin duplicación.
-
-Criterio de finalización: los mismos torneos fuente producen resultados coherentes en la vista del grupo, el perfil global y una reconstrucción independiente.
-
-Commit: `Add group and global player statistics`.
-
-### 9. Seguridad, concurrencia y privacidad
-
-Estado: `[ ]` Pendiente.
-
-- `[ ]` Completar matriz de Rules para todos los roles y estados.
-- `[ ]` Probar revocación de permisos con sesiones abiertas.
-- `[ ]` Probar carreras de aceptación, transferencia y remoción.
-- `[ ]` Agregar rate limits para creación e invitaciones.
-- `[ ]` Revisar enumeración de usernames y filtración de emails.
-- `[ ]` Revisar logs, exportaciones y mensajes de error.
-- `[ ]` Probar intervención auditada de super admin.
-- `[ ]` Ejecutar tests integrados de Auth, Functions y Database.
-
-Criterio de finalización: no existe escalamiento de privilegios ni lectura cruzada entre grupos privados, incluso llamando directamente al backend.
-
-Commit: `Harden group security and privacy`.
-
-### 10. Migración compatible y publicación
-
-Estado: `[ ]` Pendiente.
-
-- `[ ]` Probar torneos anteriores sin `groupId` ni participant refs.
-- `[ ]` Probar creación perezosa de perfiles deportivos.
-- `[ ]` Definir orden exacto de deploy de Functions, Rules y frontend.
-- `[ ]` Ejecutar tests completos con Node 22 LTS verificado dentro de los procesos hijos.
-- `[ ]` Ejecutar emuladores de Functions, Auth y Database Rules sin errores de puertos.
-- `[ ]` Desplegar Functions y Rules y verificar su estado final.
-- `[ ]` Publicar GitHub Pages y esperar el workflow exitoso.
-- `[ ]` Verificar producción con varias cuentas, grupo privado, invitaciones y torneos.
-- `[ ]` Verificar celular y escritorio sin errores de consola.
-- `[ ]` Actualizar README y crear un tag estable.
-
-Criterio de finalización: la versión productiva permite completar los flujos críticos y los torneos anteriores continúan funcionando sin cambios.
-
-Commit: `Release groups and player statistics`.
-
-### 11. Funcionalidades posteriores
-
-Estado: `[ ]` Pendiente; fuera del primer lanzamiento.
-
-- `[ ]` Temporadas y rankings por período.
-- `[ ]` Convocatorias, asistencia y suplentes.
-- `[ ]` Botón “Repetir torneo”.
-- `[ ]` Comparación entre jugadores.
-- `[ ]` Reconocimientos y logros.
-- `[ ]` Ranking Elo evaluado con datos reales.
-- `[ ]` Grupos descubribles y solicitudes de ingreso.
-- `[ ]` Notificaciones externas.
-- `[ ]` Exportación visual y perfiles compartibles.
-
-Cada funcionalidad requerirá su propia definición de privacidad y criterios de aceptación.
-
-## Estrategia de pruebas
-
-### Tests unitarios de dominio
-
-- creación válida de grupo con un único owner;
-- normalización y validación de perfil y configuración;
-- matriz completa de permisos;
-- transiciones de membresía permitidas y prohibidas;
-- transferencia atómica de propiedad;
-- expiración y revocación de invitaciones;
-- identidad provisional y vinculación;
-- snapshots de participantes;
-- extracción de contribuciones estadísticas;
-- ranking, porcentajes, parejas, rivales y rachas;
-- terminal blank score y partidos incompletos;
-- reconstrucción determinista.
-
-### Tests de Cloud Functions
-
-- alta Google crea exactamente un perfil `user`;
-- reingreso Google no sobrescribe el perfil ni duplica identidades;
-- bootstrap exige proveedor Google, email verificado, secreto y UID canónico;
-- la cuenta configurada en `SUPER_ADMIN_EMAIL` recibe `superAdmin` y otra cuenta Google no;
-- una claim `superAdmin` con UID distinto queda sin autorización efectiva;
-- un `admin` existente conserva su claim al usar Google vinculado;
-- colisión de proveedores no crea un segundo UID silenciosamente;
-- autenticación obligatoria;
-- rol global separado de rol local;
-- admin global sin acceso automático al grupo;
-- idempotencia por `operationId`;
-- conflictos de revisión;
-- aceptación simultánea de invitaciones;
-- revocación durante aceptación;
-- remoción mientras se crea un torneo;
-- corrección de resultado y reemplazo de contribución;
-- errores sin filtración de existencia o identidad privada.
-
-### Tests de Firebase Rules
-
-Se cubrirá la matriz de owner, admin de grupo, miembro, exmiembro, invitado, admin global, super admin, participante, espectador, usuario ajeno y sesión anónima para cada ruta legible o escribible.
-
-No se considerará suficiente que la interfaz o los tests unitarios bloqueen una acción. Las pruebas deben demostrar el rechazo real del backend y de Rules Emulator.
-
-### Tests de integración
-
-- crear cuenta → crear grupo → invitar → aceptar → crear torneo → anotar resultados → verificar estadísticas;
-- agregar provisional → jugar varios torneos → vincular cuenta → conservar estadísticas;
-- salir del grupo → perder acceso → conservar estadísticas personales;
-- transferir propiedad → salir owner anterior → mantener grupo administrable;
-- borrar/restaurar torneo → retirar/reponer contribución;
-- corregir resultado histórico → actualizar ranking y racha;
-- archivar/reactivar grupo;
-- abrir un torneo anterior independiente.
-
-### Tests de concurrencia
-
-- dos administradores invitan al mismo usuario;
-- dos sesiones aceptan el mismo link;
-- owner transfiere mientras otro admin remueve al destino;
-- miembro es removido mientras crea un torneo;
-- dos scores actualizan estadísticas sobre la misma revisión;
-- reconstrucción coincide con una mutación en curso;
-- retry de Function no duplica actividad ni estadísticas.
-
-### Verificación visual y productiva
-
-- escritorio y celular;
-- controles reales de la interfaz, no sólo escritura programática del DOM;
-- múltiples sesiones con roles diferentes;
-- revocación visible sin recargar cuando sea viable;
-- enlaces de invitación vencidos y válidos;
-- ausencia de errores de consola;
-- estado final de Functions, Rules y GitHub Pages confirmado por separado.
-
-## Riesgos y mitigaciones
-
-### Confundir roles globales y locales
-
-Riesgo: un admin de plataforma obtiene acceso a grupos ajenos o un admin de grupo recibe funciones globales.
-
-Mitigación: helpers de autorización separados, nombres de UI explícitos y matriz de Rules con casos negativos.
-
-### Usar nombres como identidad
-
-Riesgo: homónimos, renombres o errores de tipeo mezclan estadísticas.
-
-Mitigación: `playerProfileId` opaco, snapshots históricos y vinculación confirmada.
-
-### Duplicar estadísticas por retries
-
-Riesgo: una Function reintentada suma dos veces un torneo.
-
-Mitigación: contribución reemplazable por `tournamentId`, `sourceRevision`, receipts idempotentes y reconstrucción comparativa.
-
-### Estadísticas incoherentes después de correcciones
-
-Riesgo: totales se corrigen pero rachas o parejas quedan obsoletas.
-
-Mitigación: contribución normalizada, eventos cronológicos y reconstrucción de métricas no aditivas.
-
-### Perder historia al salir o borrar
-
-Riesgo: eliminar una membresía rompe referencias antiguas.
-
-Mitigación: estados de ciclo de vida, borrado lógico y referencias estables que nunca dependen de la membresía activa.
-
-### Reclamo incorrecto de un jugador provisional
-
-Riesgo: una cuenta se apropia de estadísticas ajenas.
-
-Mitigación: aprobación de owner/admin, unicidad UID-perfil, auditoría y reversión controlada.
-
-### Enumeración de usuarios
-
-Riesgo: búsqueda o invitaciones revelan usernames, emails o pertenencia a grupos.
-
-Mitigación: resolución exacta en Functions, respuestas no enumerables, rate limiting y directorio privado.
-
-### Links filtrados o reutilizados
-
-Riesgo: terceros entran al grupo.
-
-Mitigación: hash, vencimiento, revocación, un solo uso y aceptación autenticada.
-
-### Owner inexistente
-
-Riesgo: el grupo queda sin administración o con dos propietarios.
-
-Mitigación: transferencia transaccional, invariante de exactamente uno y recuperación excepcional por super admin.
+### 0. Cerrar decisiones y prerrequisitos
+
+- `[x]` Reducir alcance v1 y separar v2.
+- `[ ]` Verificar segunda cuenta Google común en producción.
+- `[ ]` Probar recuperación de UID canónico.
+- `[x]` Definir límites máximos iniciales de grupos, miembros, jugadores y torneos para v1.
+
+### 1. Dominio local y permisos
+
+- `[x]` Modelar grupo, membresía revisada, `groupPlayerId` e invitaciones rígidas.
+- `[x]` Implementar matrices de permisos.
+- `[x]` Modelar archivo de sólo lectura y transferencia.
+- `[x]` Probar transiciones y unicidad UID ↔ groupPlayerId.
+
+### 2. Persistencia autoritativa
+
+- `[x]` Implementar `groupDomains/{groupId}`.
+- `[x]` Implementar receipts con payload hash.
+- `[ ]` Implementar outbox, auditoría, proyecciones y reconciliación.
+- `[x]` Agregar Rules con escrituras directas denegadas.
+- `[x]` Incorporar validación previa, trigger Auth y recuperación de owner eliminado.
+
+### 3. Invitaciones y plantilla
+
+- `[x]` Invitación dirigida por username.
+- `[x]` Enlace general único, 7 días y 10 usos.
+- `[x]` Persistencia temporal segura del enlace durante login/registro.
+- `[x]` Carreras por último cupo, revocación y reintentos.
+- `[x]` Provisionales sin reclamo.
+- `[x]` Salida, remoción y reincorporación dirigida.
+
+### 4. Interfaz de grupos
+
+- `[x]` Mis grupos, detalle, plantilla e invitaciones.
+- `[x]` Gestión de roles, transferencia y archivo.
+- `[x]` Estados de sólo lectura y permisos revocados.
+- `[x]` Verificación táctil en celular.
+
+### 5. Torneos de grupo
+
+- `[x]` Crear con `groupId` y participant refs locales.
+- `[x]` Implementar `tournamentRefs` autoritativas y provisioning recuperable.
+- `[x]` Autorizar sólo mediante roles actuales del grupo.
+- `[x]` Generar bindings UID ↔ groupPlayerId y bloquear claims manuales.
+- `[x]` Reservar y cerrar grants para cada mutación de torneo.
+- `[x]` Bloquear todas las mutaciones al archivar.
+- `[x]` Mantener torneos independientes compatibles.
+
+### 6. Estadísticas bajo demanda
+
+- `[x]` Recorrer referencias autoritativas paginadas y validar cada torneo fuente.
+- `[x]` Implementar métricas aditivas y ranking básico.
+- `[x]` Filtrar activos o historia completa.
+- `[ ]` Probar correcciones, anulaciones, borrado y restauración.
+- `[x]` Definir límites de cálculo y respuesta no parcial.
+- `[x]` Validar por carga el máximo de 250 torneos × 40 rondas y reducirlo antes del feature flag si excede el timeout.
+
+### 7. Seguridad y concurrencia
+
+- `[ ]` Matriz completa de Functions y Rules.
+- `[x]` Rate limits y cuotas.
+- `[ ]` App Check obligatorio en Functions públicas de grupos e invitaciones, con manejo explícito del flujo de enlace.
+- `[ ]` Pruebas de owner eliminado, recuperación, transferencia concurrente y remoción durante score.
+- `[ ]` Probar grants abandonados, provisioning interrumpido y reconciliación.
+- `[x]` Verificar que ninguna lectura padre exponga secretos en RTDB.
+- `[x]` Revisar tokens, logs, referrers y respuestas no enumerables.
+- `[x]` Integración Auth + Functions + Database.
+
+### 8. Migración y publicación
+
+- `[x]` Torneos anteriores compatibles como independientes.
+- `[ ]` Orden de deploy: Functions compatibles, Rules, frontend y feature flag.
+- `[x]` Tests completos con Node 22 LTS.
+- `[x]` Emuladores sin errores de puertos.
+- `[ ]` Deploy y verificación separada de Functions, Rules y GitHub Pages.
+- `[ ]` Prueba productiva con varias cuentas, enlace agotado, archivo y torneo.
+
+## Estrategia de pruebas mínima
+
+### Dominio
+
+- exactamente un owner en estados operacionales y excepción controlada `recoveryRequired` ante borrado Auth externo;
+- transferencia define rol del owner anterior;
+- UID único dentro del grupo;
+- membership revisions y eventos;
+- reincorporación de un exadmin siempre vuelve como member;
+- provisional nunca adquiere UID;
+- enlace fijo y estado efectivo;
+- archivo bloquea mutaciones.
+
+### Integración
+
+- crear cuenta → grupo → invitación → aceptación → torneo → stats;
+- diez cuentas aceptan y la undécima falla;
+- el mismo UID reintenta sin consumir cupo;
+- miembro sale y no reingresa con enlace general;
+- invitación dirigida reincorpora reutilizando groupPlayerId;
+- admin removido pierde administración de torneos existentes;
+- member removido pierde scores propios y un provisional no puede reclamarse;
+- archivar bloquea score y reactivar lo habilita;
+- login/registro desde enlace general conserva el secreto sólo durante la sesión de pestaña;
+- provisional conserva historial al desactivarse;
+- corrección de score cambia estadísticas calculadas bajo demanda;
+- índice de torneos ausente no elimina el torneo de estadísticas;
+- soft-delete excluye y restore reincluye exactamente una vez;
+- eliminación normal de owner queda bloqueada y borrado Auth externo pasa a `recoveryRequired`.
+
+### Concurrencia
+
+- dos UIDs compiten por el décimo cupo;
+- revocación simultánea con aceptación;
+- dos admins invitan al mismo username;
+- transferencia simultánea con remoción del destino;
+- salida simultánea con mutación de score;
+- archivo o remoción con grant vigente devuelve `GROUP_BUSY` y funciona al reintentar;
+- degradación de admin y transferencia también respetan grants relevantes;
+- crash después de reservar grant y después de crear torneo se recupera sin duplicar;
+- retry no duplica eventos ni proyecciones.
+
+### Rules y privacidad
+
+- leer `groupDomains/{groupId}` completo falla para owner, admin, member y superadmin cliente;
+- ningún DTO contiene `tokenHash`, receipts, grants, outbox ni payloads de auditoría;
+- una entrada estática en `tournamentAccess` no permite leer un torneo de grupo después de salir o ser removido;
+- exmiembro obtiene sólo sus snapshots y estadísticas personales, nunca plantilla actual ni torneos nuevos;
+- grupo `recoveryRequired` rechaza todas las mutaciones ordinarias.
+- superadmin cliente no puede usar su claim para saltar privacidad de un torneo de grupo.
+
+## Riesgos principales y mitigaciones
 
 ### Índices divergentes
 
-Riesgo: “Mis grupos”, historial o estadísticas no reflejan la fuente real.
+Las proyecciones pueden atrasarse. Se mitiga con `tournamentRefs` y dominio como fuentes autoritativas, outbox idempotente y reconciliación; nunca autorizan ni alimentan estadísticas por sí mismas.
 
-Mitigación: escrituras multipath transaccionales, revisión de origen, tareas de verificación y reconstrucción.
+### Mutación concurrente con archivo o remoción
 
-### Creación abierta y abuso
+Una validación previa aislada permite carreras entre ramas RTDB. Se mitiga reservando un grant en la transacción del grupo y haciendo que transiciones incompatibles fallen con `GROUP_BUSY` mientras exista trabajo vigente. El reconciliador nunca libera un grant sólo por reloj sin comprobar timeout de ejecución y receipt del torneo.
 
-Riesgo: permitir torneos a usuarios comunes produce spam o costos inesperados.
+### Token filtrado
 
-Mitigación: cuentas verificadas, límites de frecuencia, cuotas razonables y monitoreo antes de abrir visibilidad pública.
+Se mitiga con fragmento URL, limpieza inmediata, no-referrer, hash, vencimiento fijo, diez usos, revocación y rate limits.
 
-### Migración por coincidencia de nombres
+Durante login o registro se conserva exclusivamente en `sessionStorage` de la pestaña y se borra en todos los finales del flujo.
 
-Riesgo: intentar sumar torneos anteriores asigna resultados a la persona equivocada.
+### Owner inexistente
 
-Mitigación: torneos anteriores permanecen independientes; cualquier vinculación retroactiva será explícita, revisable y fuera del corte inicial.
+Se bloquea eliminación normal antes de transferir. Ante borrado externo de Auth, trigger y reconciliación llevan el grupo a `recoveryRequired`; no se finge que el owner sigue existiendo ni se reasigna silenciosamente.
 
-## Criterios de aceptación
+### Acceso residual a torneos
 
-La primera versión se considerará completa cuando:
+Para torneos de grupo se ignora `ownerUid` como permiso independiente y siempre se consulta el rol grupal actual.
 
-- cualquier usuario pueda registrarse o iniciar sesión con Google y obtener un perfil común;
-- sólo el UID canónico de la cuenta configurada en `SUPER_ADMIN_EMAIL` pueda ejercer `superAdmin`;
-- una segunda cuenta Google no reciba errores o mensajes de bootstrap de super admin;
-- una cuenta `user` pueda crear un grupo sin convertirse en admin global;
-- cada grupo tenga exactamente un owner activo;
-- owner, admin y member vean y ejecuten sólo sus acciones permitidas;
-- un admin global sin membresía no pueda leer ni modificar un grupo privado;
-- el super admin pueda realizar recuperación excepcional auditada;
-- se pueda invitar por username y por link vencible sin exponer el directorio;
-- un usuario pueda aceptar, rechazar, salir y volver a ser invitado;
-- un jugador sin cuenta pueda figurar en la plantilla y acumular historia grupal;
-- ese jugador pueda vincularse después con una cuenta sin duplicar resultados;
-- se pueda crear un torneo independiente o asociado a un único grupo;
-- un torneo de grupo use la plantilla y conserve snapshots estables;
-- cambiar la plantilla, los nombres o la membresía no altere torneos históricos;
-- los partidos completos alimenten estadísticas globales y del grupo exactamente una vez;
-- los partidos incompletos no aporten métricas;
-- `4–vacío` compute como `4–0` sólo cuando cuatro sea el objetivo terminal;
-- corregir, anular, borrar o restaurar un torneo actualice los agregados correctamente;
-- salir o ser removido no borre contribuciones históricas;
-- archivar un grupo bloquee actividad nueva pero preserve consulta histórica;
-- las estadísticas muestren denominadores y distingan miembros activos de históricos;
-- una reconstrucción total coincida con los agregados incrementales;
-- Functions y Rules rechacen accesos cruzados y escalamiento de privilegios;
-- torneos anteriores continúen funcionando como independientes;
-- tests unitarios, Functions, Rules Emulator e integración pasen con Node 22 LTS;
-- Functions, Rules y frontend queden desplegados y verificados por separado;
-- los flujos críticos funcionen en producción desde escritorio y celular sin errores de consola.
+### Lectura accidental de secretos RTDB
 
-## Decisiones recomendadas
+Una regla `.read` en el padre expondría todos los hijos. No se concede lectura cliente en `groupDomains`; Functions construyen DTOs con allowlist y Rules tests verifican que hashes, receipts, grants, outbox y auditoría sean inaccesibles.
 
-1. Implementar login/registro Google público antes de comenzar grupos.
-2. Autorizar como único super admin efectivo al UID canónico de la cuenta confirmada en `SUPER_ADMIN_EMAIL`.
-3. Mantener roles globales y locales completamente separados.
-4. Usar sólo `owner`, `admin` y `member` dentro de grupos en la primera versión.
-5. Permitir que cualquier cuenta registrada cree grupos y torneos independientes.
-6. Desactivar por defecto la creación de torneos por miembros comunes.
-7. Hacer privados todos los grupos inicialmente.
-8. Asociar cada torneo con cero o un grupo y no permitir movimientos posteriores en v1.
-9. Introducir un `playerProfileId` estable independiente del nombre y del UID.
-10. Permitir jugadores provisionales y vinculación confirmada posterior.
-11. Conservar snapshots históricos y estados de membresía en lugar de borrar registros.
-12. Mantener resultados como fuente de verdad y estadísticas como agregados reconstruibles.
-13. Usar contribuciones por torneo con revisión para tolerar retries y correcciones.
-14. No migrar estadísticas anteriores mediante coincidencia automática de nombres.
-15. Mantener Elo, temporadas, convocatorias y funciones sociales fuera del primer lanzamiento.
-16. Desplegar en etapas compatibles y verificar Functions, Rules, frontend y comportamiento real por separado.
+### Crecimiento del límite transaccional
 
-## Orden de implementación recomendado
+Auditoría e historial de eventos se publican fuera de `groupDomains`. Invitaciones, grants y receipts tienen retención fija; la outbox drenada se monitorea. Los contadores y límites evitan que una transacción condicional crezca sin control.
 
-Primero se completa el login público con Google y se garantiza el super admin único (etapa 0A). Después se cierra el dominio y la seguridad de grupos (etapas 1 y 2). Luego se incorporan invitaciones, plantilla e interfaz básica (etapas 3 y 4). Antes de asociar torneos se resuelve la identidad deportiva estable (etapa 5). Recién después se crean torneos de grupo y su historia (etapa 6), y sobre esa fuente se construyen contribuciones y estadísticas (etapas 7 y 8). El endurecimiento, la migración y la publicación cierran el trabajo (etapas 9 y 10).
+### Cálculo estadístico costoso
 
-No se publicará una interfaz que permita crear grupos antes de que Functions y Rules impidan accesos cruzados. Tampoco se habilitarán estadísticas globales hasta demostrar que una corrección o retry no puede duplicar contribuciones.
+Se mitiga con paginación y límites aplicados al alta, antes de que el grupo supere la capacidad calculable. V1 no mantiene agregados que puedan divergir y nunca devuelve un resultado parcial.
 
-## Referencias internas
+## Criterios de aceptación de v1
 
-- `PLAN-LOGIN-USUARIOS.md`: autenticación, roles globales y permisos actuales.
-- `PLAN-FIXTURE-BALANCEADO.md`: esquema v2, edición, concurrencia y corte de versión de torneos.
-- `functions/src/domain/tournament-v2.js`: fuente autoritativa actual de creación y mutaciones de torneo.
-- `functions/src/user-accounts.js`: perfiles de cuentas comunes y usernames.
-- `functions/src/tournament-catalog.js`: autorización e historial actual por rol.
-- `database.rules.json`: límites actuales de lectura y escritura.
-- `src/features/scoring/statistics.js`: métricas actuales dentro de un torneo.
-- `src/features/scoring/validation.js`: definición vigente de partido completo y score terminal.
+V1 se considera completa cuando:
+
+- una cuenta común crea un grupo sin recibir rol global;
+- cada grupo operacional conserva exactamente un owner existente; un borrado Auth externo produce explícitamente `recoveryRequired` hasta su recuperación auditada;
+- owner/admin/member sólo ejecutan acciones permitidas;
+- miembros comunes no crean torneos;
+- un provisional puede jugar y acumular estadísticas grupales pero no ser reclamado;
+- una invitación dirigida reincorpora sin duplicar jugador local;
+- una reincorporación siempre vuelve como member y nunca recupera privilegios anteriores;
+- un único enlace general admite exactamente diez incorporaciones durante siete días;
+- reintentos no consumen usos y `left/removed` no reingresan por enlace general;
+- el enlace sobrevive login/registro sólo en la sesión de pestaña y se elimina al terminar;
+- sólo roles grupales actuales administran torneos de grupo;
+- un score de member exige binding backend y membresía activa; no existe claim manual en torneos de grupo;
+- archivar bloquea toda mutación y reactivar no revive invitaciones;
+- archivo, remoción y salida no se confirman mientras haya grants incompatibles vigentes;
+- estadísticas básicas se calculan desde referencias autoritativas y torneos fuente, reflejan correcciones y no dependen del índice proyectado;
+- un exmiembro conserva únicamente su vista histórica personal y no accede a contenido grupal nuevo;
+- no existe ninguna estadística global ni perfil deportivo global en v1;
+- ningún cliente escribe datos autoritativos directamente;
+- ningún cliente puede leer el dominio completo ni secretos internos del grupo;
+- torneos existentes continúan como independientes;
+- límites máximos se rechazan al escribir y el máximo estadístico publicado pasa la prueba de carga completa;
+- tests unitarios, Functions, Rules Emulator e integración pasan;
+- Functions, Rules y frontend se despliegan y verifican por separado;
+- escritorio y celular funcionan sin errores de consola.
+
+## Referencias
+
+- [`PLAN-GRUPOS_v2.md`](./PLAN-GRUPOS_v2.md): funcionalidades postergadas y migración futura.
+- `PLAN-LOGIN-USUARIOS.md`: cuentas y roles globales.
+- `PLAN-FIXTURE-BALANCEADO.md`: esquema y concurrencia del fixture.
+- `functions/src/domain/tournament-v2.js`: autorización y mutaciones actuales.
+- `functions/src/user-accounts.js`: cuentas comunes y usernames.
+- `database.rules.json`: reglas actuales.
+- `src/features/scoring/validation.js`: partido completo y score terminal.

@@ -50,6 +50,7 @@ import { renderTournamentHistory } from './ui/components/tournament-history.js';
 import { renderSummaryModal, setModalOpen } from './ui/components/modal.js';
 import { bindStaticUIEvents } from './ui/bind-events.js';
 import { createAppController } from './app/app-controller.js';
+import { createGroupsController } from './features/groups/controller.js';
 
     const MIN_PLAYERS = 4;
     const MAX_PLAYERS = 16;
@@ -75,7 +76,18 @@ import { createAppController } from './app/app-controller.js';
         messagingSenderId: '721713590787',
         appId: '1:721713590787:web:3df62ebcfc8841e41c5436'
     };
-    const firebaseClient = createFirebaseClient({ firebase, config: firebaseConfig });
+    const useFirebaseEmulators = ['localhost', '127.0.0.1'].includes(location.hostname)
+        && new URLSearchParams(location.search).get('emulator') === '1';
+    const firebaseClient = createFirebaseClient({
+        firebase,
+        config: firebaseConfig,
+        emulator: useFirebaseEmulators ? {
+            authUrl: 'http://127.0.0.1:9099',
+            databaseHost: '127.0.0.1',
+            databasePort: 9000,
+            functionsOrigin: `http://127.0.0.1:5001/${firebaseConfig.projectId}/us-central1`
+        } : null
+    });
     const authSession = createAuthSession({ firebase, auth: firebaseClient.getAuth() });
     const adminUserApi = createAdminUserApi({ callFunction: (...args) => firebaseClient.callFunction(...args) });
     let tournamentId = new URLSearchParams(location.search).get('torneo');
@@ -105,6 +117,13 @@ import { createAppController } from './app/app-controller.js';
     let pendingTournamentDeletion = null;
     let pendingTournamentDeletionMode = 'logical';
     let selectedTournamentDeletionIds = new Set();
+    const groupsController = createGroupsController({
+        callFunction: (...args) => firebaseClient.callFunction(...args),
+        getCurrentUser: () => sessionUser,
+        showToast: message => showToast(message),
+        openAuth: () => openAuthModal(),
+        openTournament: id => openPreviousTournament(id)
+    });
     const presenceId = (() => {
         const key = 'padel-torneo-device-id';
         const generatedId = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`).replace(/-/g, '');
@@ -238,11 +257,13 @@ import { createAppController } from './app/app-controller.js';
         const signOutButton = document.getElementById('sign-out-button');
         const status = document.getElementById('auth-status');
         const usersButton = document.getElementById('users-button');
+        const groupsButton = document.getElementById('groups-button');
         const tournamentAdminButton = document.getElementById('tournament-admin-button');
         const isRegisteredUser = sessionUser && !sessionUser.isAnonymous;
         signInButton.hidden = Boolean(isRegisteredUser);
         signOutButton.hidden = !isRegisteredUser;
         usersButton.hidden = sessionRole !== 'superAdmin';
+        groupsButton.hidden = !isRegisteredUser;
         tournamentAdminButton.hidden = sessionRole !== 'superAdmin' || !tournamentId;
         const roleLabel = sessionRole === 'superAdmin'
             ? ' · Super admin'
@@ -370,6 +391,11 @@ import { createAppController } from './app/app-controller.js';
 
     function closeAuthModal() {
         setModalOpen('auth-modal', false);
+    }
+
+    function cancelAuthModal() {
+        groupsController.cancelPendingInvitation();
+        closeAuthModal();
     }
 
     function closeUsersModal() {
@@ -889,11 +915,18 @@ import { createAppController } from './app/app-controller.js';
         return !tournamentId && location.hash === '#historial';
     }
 
+    function isGroupsPage() {
+        return !tournamentId && location.hash === '#grupos';
+    }
+
     function updatePageView() {
         const historyPage = isHistoryPage();
-        document.getElementById('main-page').hidden = historyPage;
+        const groupsPage = isGroupsPage();
+        document.getElementById('main-page').hidden = historyPage || groupsPage;
         document.getElementById('tournament-history-page').hidden = !historyPage;
+        document.getElementById('groups-page').hidden = !groupsPage;
         if (historyPage) renderPreviousTournaments();
+        if (groupsPage) groupsController.onRouteChanged();
     }
 
     function showTournamentHistory() {
@@ -902,7 +935,7 @@ import { createAppController } from './app/app-controller.js';
     }
 
     function showMainPage() {
-        if (!isHistoryPage()) return;
+        if (!isHistoryPage() && !isGroupsPage()) return;
         history.replaceState(null, '', `${location.pathname}${location.search}`);
         updatePageView();
     }
@@ -2331,13 +2364,17 @@ import { createAppController } from './app/app-controller.js';
     }
 
     function initializeApplication() {
+    groupsController.bind();
     authSession.subscribe(user => {
         sessionUser = user;
         if (!user) {
             googleProvisionUid = null;
             googleProvisionPromise = null;
         }
-        refreshSessionRole().then(() => provisionGoogleUser()).catch(() => {});
+        refreshSessionRole()
+            .then(() => provisionGoogleUser())
+            .catch(() => {})
+            .finally(() => groupsController.onAuthChanged());
     });
     tournamentState.value.players = defaultPlayers(tournamentState.value.numPlayers);
     generateSchedule();
@@ -2368,7 +2405,7 @@ import { createAppController } from './app/app-controller.js';
     registerUser, resetAll, resetSchedule, sendPasswordReset, setCourtCount, setGamesPerSet, setPlayerCount, setRoundCount,
     setPairingMode, setFixedTeamPlayer,
     shareState, shareTournamentSummary, showIdentityChoice, showMainPage, showTournamentHistory, signInWithEmailAndPassword,
-    showLoginMode, showRegistrationMode, signInWithGoogle, signOut, closeAuthModal, undoLastChange,
+    showLoginMode, showRegistrationMode, signInWithGoogle, signOut, closeAuthModal: cancelAuthModal, undoLastChange,
     openUsersModal, closeUsersModal, createAdminUser, deleteAdminUser,
     startAdminEdit, cancelAdminEdit, toggleAdminUser, setUserPlatformRole, generateAdminPasswordResetLink,
     openTournamentAdminModal, closeTournamentAdminModal, setTournamentAdmin

@@ -242,6 +242,169 @@ test('smoke v2: creación, roles, score, extensión y barreras directas', {
     assert.equal(outsiderRead.response.ok, false);
 });
 
+test('smoke grupos v1: membresía, torneo, score terminal, salida, enlace y archivo', {
+    skip: !hasEmulators,
+    timeout: 60_000
+}, async () => {
+    if (!getApps().length) initializeApp({
+        projectId,
+        databaseURL: `https://${projectId}-default-rtdb.firebaseio.com`
+    });
+    const password = 'Clave1234';
+    const ownerRecord = await getAuth().createUser({ email: 'group-owner@example.test', password });
+    const owner = await signIn('group-owner@example.test', password);
+    await call('registerUserV2', null, { identifier: 'grupo.invitado', password });
+    const invitedLogin = await call('resolveUsernameLoginV2', null, { username: 'grupo.invitado' });
+    const invited = await signIn(invitedLogin.authEmail, password);
+
+    const createdGroup = await call('createGroupV1', owner.idToken, {
+        operationId: 'groupcreate00000000000000000001',
+        name: 'Viernes de pádel',
+        description: 'Grupo de prueba'
+    });
+    const groupId = createdGroup.groupId;
+    assert.equal((await getDatabase().ref(`groupDomains/${groupId}`).get()).exists(), true);
+    const invitation = await call('inviteGroupUserV1', owner.idToken, {
+        operationId: 'groupinvite00000000000000000001',
+        groupId,
+        username: 'grupo.invitado'
+    });
+    await call('acceptGroupUserInvitationV1', invited.idToken, {
+        operationId: 'groupaccept00000000000000000001',
+        groupId,
+        invitationId: invitation.invitationId
+    });
+    for (const [index, displayName] of ['Ana', 'Beto', 'Caro'].entries()) {
+        await call('addProvisionalGroupPlayerV1', owner.idToken, {
+            operationId: `groupprovisional000000000000000${index}`,
+            groupId,
+            displayName
+        });
+    }
+    const group = await call('getGroupV1', owner.idToken, { groupId });
+    assert.equal(group.role, 'owner');
+    assert.equal(group.players.length, 5);
+    const invitedMember = group.members.find(member => member.uid === invited.localId);
+    const ownerMember = group.members.find(member => member.uid === ownerRecord.uid);
+    const provisionalIds = group.players.filter(player => player.kind === 'provisional')
+        .slice(0, 2).map(player => player.groupPlayerId);
+    const selectedIds = [ownerMember.groupPlayerId, invitedMember.groupPlayerId, ...provisionalIds];
+    const tournament = await call('createTournamentV2', owner.idToken, {
+        creationRequestId: 'grouptournament000000000000000001',
+        groupId,
+        groupPlayerIds: selectedIds,
+        configuration: { numPlayers: 4, numCourts: 1, pairingMode: 'rotating', fixedTeams: [] },
+        numRounds: 3,
+        gamesPerSet: 4,
+        players: ['Servidor 1', 'Servidor 2', 'Servidor 3', 'Servidor 4'],
+        metadata: { tournamentName: 'Torneo del grupo', tournamentDate: '2026-08-08' }
+    });
+    const access = await call('getTournamentAccessViewV2', invited.idToken, {
+        tournamentId: tournament.tournamentId
+    });
+    assert.equal(access.role, 'participant');
+    assert.equal(Number.isInteger(access.playerId), true);
+    const publicRead = await readPublic(tournament.tournamentId, invited.idToken);
+    assert.equal(publicRead.response.ok, true);
+    const located = publicRead.body.state.schedule
+        .flatMap(round => round.matches.map(match => ({ round, match })))
+        .find(({ match }) => [match.t1_p1, match.t1_p2, match.t2_p1, match.t2_p2].includes(access.playerId));
+    await call('mutateTournamentV2', invited.idToken, {
+        tournamentId: tournament.tournamentId,
+        operationId: 'groupscore00000000000000000000001',
+        expectedRevision: 0,
+        type: 'updateScore',
+        payload: {
+            expectedScheduleRevision: publicRead.body.state.scheduleRevision,
+            expectedScheduleFingerprint: publicRead.body.state.scheduleFingerprint,
+            roundId: located.round.id,
+            matchId: located.match.id,
+            expectedPlayerIds: [located.match.t1_p1, located.match.t1_p2, located.match.t2_p1, located.match.t2_p2],
+            field: 'score1',
+            value: 4
+        }
+    });
+    const stats = await call('getGroupStatsV1', owner.idToken, { groupId });
+    assert.equal(stats.players.reduce((total, player) => total + player.matchesPlayed, 0), 4);
+    assert.equal(stats.players.reduce((total, player) => total + player.gamesFor, 0), 8);
+
+    const generalLink = await call('createGeneralGroupLinkV1', owner.idToken, {
+        operationId: 'grouplink00000000000000000000001',
+        groupId
+    });
+    const preview = await call('previewGeneralGroupLinkV1', null, {
+        groupId,
+        invitationId: generalLink.invitationId,
+        token: generalLink.token
+    });
+    assert.equal(preview.remainingUses, 10);
+    await call('registerUserV2', null, { identifier: 'grupo.general', password });
+    const generalLogin = await call('resolveUsernameLoginV2', null, { username: 'grupo.general' });
+    const generalMember = await signIn(generalLogin.authEmail, password);
+    await call('acceptGeneralGroupLinkV1', generalMember.idToken, {
+        operationId: 'groupgeneralaccept000000000000001',
+        groupId,
+        invitationId: generalLink.invitationId,
+        token: generalLink.token
+    });
+    const previewAfter = await call('previewGeneralGroupLinkV1', null, {
+        groupId,
+        invitationId: generalLink.invitationId,
+        token: generalLink.token
+    });
+    assert.equal(previewAfter.remainingUses, 9);
+
+    await call('leaveGroupV1', invited.idToken, {
+        operationId: 'groupleave000000000000000000001',
+        groupId
+    });
+    const readAfterLeave = await readPublic(tournament.tournamentId, invited.idToken);
+    assert.equal(readAfterLeave.response.ok, false);
+    const mutationAfterLeave = await call('mutateTournamentV2', invited.idToken, {
+        tournamentId: tournament.tournamentId,
+        operationId: 'groupscoreafterleave000000000001',
+        expectedRevision: 1,
+        type: 'updateScore',
+        payload: {
+            expectedScheduleRevision: publicRead.body.state.scheduleRevision,
+            expectedScheduleFingerprint: publicRead.body.state.scheduleFingerprint,
+            roundId: located.round.id,
+            matchId: located.match.id,
+            expectedPlayerIds: [located.match.t1_p1, located.match.t1_p2, located.match.t2_p1, located.match.t2_p2],
+            field: 'score2',
+            value: 1
+        }
+    }, { expectError: true });
+    assert.equal(mutationAfterLeave.status, 'PERMISSION_DENIED');
+
+    await call('archiveGroupV1', owner.idToken, {
+        operationId: 'grouparchive0000000000000000001',
+        groupId
+    });
+    const archivedRead = await readPublic(tournament.tournamentId, owner.idToken);
+    assert.equal(archivedRead.response.ok, true);
+    const archivedMutation = await call('mutateTournamentV2', owner.idToken, {
+        tournamentId: tournament.tournamentId,
+        operationId: 'groupscorearchived00000000000001',
+        expectedRevision: 1,
+        type: 'updateScore',
+        payload: {
+            expectedScheduleRevision: publicRead.body.state.scheduleRevision,
+            expectedScheduleFingerprint: publicRead.body.state.scheduleFingerprint,
+            roundId: located.round.id,
+            matchId: located.match.id,
+            expectedPlayerIds: [located.match.t1_p1, located.match.t1_p2, located.match.t2_p1, located.match.t2_p2],
+            field: 'score2',
+            value: 1
+        }
+    }, { expectError: true });
+    assert.equal(archivedMutation.status, 'FAILED_PRECONDITION');
+    await call('restoreGroupV1', owner.idToken, {
+        operationId: 'grouprestore0000000000000000001',
+        groupId
+    });
+});
+
 after(async () => {
     await Promise.all(getApps().map(deleteApp));
 });

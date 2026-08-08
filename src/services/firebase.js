@@ -1,10 +1,16 @@
-export function createFirebaseClient({ firebase, config, fetchFn = globalThis.fetch }) {
+export function createFirebaseClient({ firebase, config, fetchFn = globalThis.fetch, emulator = null }) {
     let database = null;
     let authInstance = null;
     let initialAuthState = null;
+    let emulatorConfigured = false;
 
     function initialize() {
         if (!firebase.apps.length) firebase.initializeApp(config);
+        if (emulator && !emulatorConfigured) {
+            firebase.auth().useEmulator(emulator.authUrl, { disableWarnings: true });
+            firebase.database().useEmulator(emulator.databaseHost, emulator.databasePort);
+            emulatorConfigured = true;
+        }
     }
 
     function getAuth() {
@@ -50,7 +56,9 @@ export function createFirebaseClient({ firebase, config, fetchFn = globalThis.fe
             const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
             const headers = { 'Content-Type': 'application/json' };
             if (token) headers.Authorization = `Bearer ${token}`;
-            const response = await fetchFn(`https://us-central1-${config.projectId}.cloudfunctions.net/${name}`, {
+            const functionsOrigin = emulator?.functionsOrigin
+                || `https://us-central1-${config.projectId}.cloudfunctions.net`;
+            const response = await fetchFn(`${functionsOrigin}/${name}`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ data })

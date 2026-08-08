@@ -38,6 +38,47 @@ import {
     preserveAdminRole
 } from './domain/tournament-v2.js';
 import { sha256 } from './domain/fixture/canonical.js';
+import {
+    asGroupHttpsError,
+    closeGroupTournamentGrant,
+    confirmGroupTournament,
+    getGroupForTournamentCreation,
+    provisionGroupTournament,
+    requireGroupActor,
+    reserveGroupTournamentMutation
+} from './groups-v1.js';
+
+export {
+    acceptGeneralGroupLinkV1,
+    acceptGroupUserInvitationV1,
+    addProvisionalGroupPlayerV1,
+    archiveGroupV1,
+    createGeneralGroupLinkV1,
+    createGroupV1,
+    getGroupHistoryV1,
+    getGroupStatsV1,
+    getGroupV1,
+    getMyHistoricalGroupStatsV1,
+    inviteGroupUserV1,
+    leaveGroupV1,
+    listGroupAuditV1,
+    listMyFormerGroupsV1,
+    listMyGroupsV1,
+    previewGeneralGroupLinkV1,
+    reconcileDeletedGroupUserV1,
+    reconcileGroupDomainsV1,
+    recoverGroupOwnershipV1,
+    rejectGroupUserInvitationV1,
+    removeGroupMemberV1,
+    restoreGroupV1,
+    revokeGeneralGroupLinkV1,
+    revokeGroupUserInvitationV1,
+    setGroupMemberRoleV1,
+    setGroupPlayerStatusV1,
+    transferGroupOwnershipV1,
+    updateGroupPlayerV1,
+    updateGroupV1
+} from './groups-v1.js';
 
 if (!getApps().length) initializeApp();
 
@@ -95,6 +136,27 @@ async function logAdminActivity(auth, action, targetUid, details = {}) {
         ...details,
         createdAt: ServerValue.TIMESTAMP
     });
+}
+
+async function getOwnedGroupIds(uid) {
+    const snapshot = await getDatabase().ref('groupDomains')
+        .orderByChild('access/ownerUid')
+        .equalTo(uid)
+        .get();
+    return Object.keys(snapshot.val() || {}).filter(groupId => {
+        const status = snapshot.val()?.[groupId]?.metadata?.status;
+        return status === 'active' || status === 'archived';
+    });
+}
+
+async function assertAccountDoesNotOwnGroups(uid) {
+    const groupIds = await getOwnedGroupIds(uid);
+    if (groupIds.length) {
+        throw new HttpsError('failed-precondition', 'La cuenta debe transferir sus grupos antes de desactivarse o eliminarse.', {
+            domainCode: 'GROUP_OWNERSHIP_TRANSFER_REQUIRED',
+            groupIds
+        });
+    }
 }
 
 async function saveAdminProfile(uid, user, currentProfile = {}) {
@@ -311,23 +373,72 @@ export const resolveUsernameLoginV2 = onCall(async request => {
 });
 
 export const createTournamentV2 = onCall(async request => {
-    const actor = await requireAuthenticated(request);
-    if (!['admin', 'superAdmin'].includes(actor.platformRole)) {
-        throw new HttpsError('permission-denied', 'Sólo un administrador puede crear torneos.');
+    let actor = await requireAuthenticated(request);
+    const groupId = typeof request.data?.groupId === 'string' ? request.data.groupId : null;
+    if (!groupId && !['admin', 'superAdmin'].includes(actor.platformRole)) {
+        throw new HttpsError('permission-denied', 'Sólo un administrador puede crear torneos independientes.');
     }
+    if (groupId) actor = await requireGroupActor(request);
     let normalized;
     try {
         normalized = normalizeCreationRequest(request.data);
     } catch (error) {
         throw asHttpsError(error);
     }
-    const digest = sha256(normalized);
-    const tournamentId = `t_${sha256(`${actor.uid}:${normalized.creationRequestId}`).slice(0, 30)}`;
+    let groupContext = null;
+    let groupPlayerIds = null;
+    if (groupId) {
+        try {
+            groupPlayerIds = request.data?.groupPlayerIds;
+            if (normalized.numRounds > 40) {
+                throw Object.assign(new Error('Los torneos de grupo admiten hasta 40 rondas.'), { code: 'INVALID_ARGUMENT' });
+            }
+            const selection = await getGroupForTournamentCreation({
+                groupId,
+                actor,
+                groupPlayerIds,
+                operationId: normalized.creationRequestId
+            });
+            normalized.players = selection.players.map(player => player.displayName);
+            const participantRefs = {};
+            const claims = {};
+            groupPlayerIds.forEach((groupPlayerId, localPlayerId) => {
+                const player = selection.group.players[groupPlayerId];
+                participantRefs[localPlayerId] = {
+                    groupPlayerId,
+                    displayNameSnapshot: player.displayName,
+                    playerKindSnapshot: player.kind
+                };
+                if (player.kind === 'registered') {
+                    claims[localPlayerId] = { uid: player.linkedUid, source: 'group', groupPlayerId };
+                }
+            });
+            groupContext = { groupId, participantRefs, claims };
+        } catch (error) {
+            throw asGroupHttpsError(error);
+        }
+    }
+    const digest = groupId ? sha256({ normalized, groupId, groupPlayerIds }) : sha256(normalized);
+    const tournamentId = groupId
+        ? `t_${sha256(`${groupId}:${normalized.creationRequestId}`).slice(0, 30)}`
+        : `t_${sha256(`${actor.uid}:${normalized.creationRequestId}`).slice(0, 30)}`;
+    if (groupId) {
+        try {
+            await provisionGroupTournament({
+                groupId, actor, tournamentId,
+                operationId: normalized.creationRequestId,
+                groupPlayerIds
+            });
+        } catch (error) {
+            throw asGroupHttpsError(error);
+        }
+    }
     const builtTournament = buildTournamentV2({
         request: normalized,
         ownerUid: actor.uid,
         tournamentId,
-        timestamp: ServerValue.TIMESTAMP
+        timestamp: ServerValue.TIMESTAMP,
+        groupContext
     });
     const rootRef = getDatabase().ref();
     let response;
@@ -362,6 +473,18 @@ export const createTournamentV2 = onCall(async request => {
     } catch (error) {
         throw asHttpsError(error);
     }
+    if (groupId) {
+        try {
+            await confirmGroupTournament({
+                groupId,
+                tournamentId,
+                operationId: normalized.creationRequestId,
+                metadata: normalized.metadata
+            });
+        } catch (error) {
+            throw asGroupHttpsError(error);
+        }
+    }
     return response;
 });
 
@@ -378,11 +501,30 @@ export const mutateTournamentV2 = onCall(async request => {
         throw asHttpsError(error);
     }
     const database = getDatabase();
-    const access = (await database.ref(`tournamentAccess/${tournamentId}`).get()).val() || {};
+    let access = (await database.ref(`tournamentAccess/${tournamentId}`).get()).val() || {};
     const tournamentRef = database.ref(`tournaments/${tournamentId}`);
     const tournamentSnapshot = await tournamentRef.get();
     if (!tournamentSnapshot.exists()) {
         throw new HttpsError('not-found', 'El torneo no existe.');
+    }
+    const groupId = tournamentSnapshot.child('public/metadata/groupId').val();
+    let groupGrant = null;
+    if (groupId) {
+        try {
+            groupGrant = await reserveGroupTournamentMutation({
+                groupId,
+                actor,
+                tournamentId,
+                operationId: mutation.operationId,
+                payloadHash: sha256({ type: mutation.type, payload: mutation.payload })
+            });
+            access = {
+                ...access,
+                groupAuthorization: groupGrant.authorization
+            };
+        } catch (error) {
+            throw asGroupHttpsError(error);
+        }
     }
     let preparedFixture;
     try {
@@ -390,6 +532,7 @@ export const mutateTournamentV2 = onCall(async request => {
             ? null
             : prepareFixtureMutation(tournamentSnapshot.val().public, mutation);
     } catch (error) {
+        if (groupGrant) await closeGroupTournamentGrant({ groupId, grantId: groupGrant.grantId, status: 'failed' });
         throw asHttpsError(error);
     }
     let output;
@@ -411,8 +554,10 @@ export const mutateTournamentV2 = onCall(async request => {
             throw Object.assign(new Error('El torneo ya no existe.'), { code: 'NOT_FOUND' });
         }
     } catch (error) {
+        if (groupGrant) await closeGroupTournamentGrant({ groupId, grantId: groupGrant.grantId, status: 'failed' });
         throw asHttpsError(error);
     }
+    if (groupGrant) await closeGroupTournamentGrant({ groupId, grantId: groupGrant.grantId });
     return output;
 });
 
@@ -427,6 +572,9 @@ export const createTournamentInvitationV2 = onCall(async request => {
     ]);
     const tournament = tournamentSnapshot.val();
     const access = accessSnapshot.val() || {};
+    if (tournament?.metadata?.groupId || access.mode === 'group') {
+        throw new HttpsError('permission-denied', 'Los torneos de grupo no usan invitaciones particulares.');
+    }
     const canManage = actor.platformRole === 'superAdmin'
         || tournament?.metadata?.ownerUid === actor.uid
         || access.members?.[actor.uid]?.role === 'admin';
@@ -471,7 +619,10 @@ export const joinTournamentV2 = onCall(async request => {
     let rejection = null;
     try {
         const accessRef = getDatabase().ref(`tournamentAccess/${tournamentId}`);
-        await accessRef.get();
+        const initialAccess = (await accessRef.get()).val();
+        if (initialAccess?.mode === 'group') {
+            throw Object.assign(new Error('Los torneos de grupo se acceden mediante membresía grupal.'), { code: 'FORBIDDEN' });
+        }
         const transaction = await accessRef.transaction(current => {
             if (!current) return current;
             const invitation = current.invitationHashes?.[hash];
@@ -513,6 +664,9 @@ export const claimTournamentPlayerV2 = onCall(async request => {
         database.ref(`tournaments/${tournamentId}/public/configuration`).get(),
         database.ref(`tournamentAccess/${tournamentId}`).get()
     ]);
+    if (accessSnapshot.val()?.mode === 'group') {
+        throw new HttpsError('permission-denied', 'Los participantes de un torneo de grupo se vinculan desde la plantilla.');
+    }
     const numPlayers = configurationSnapshot.val()?.numPlayers;
     if (!Number.isInteger(playerId) || !Number.isInteger(numPlayers)
         || playerId < 0 || playerId >= numPlayers) {
@@ -580,6 +734,19 @@ export const getTournamentAccessViewV2 = onCall(async request => {
     const tournamentId = request.data?.tournamentId;
     const snapshot = await getDatabase().ref(`tournamentAccess/${tournamentId}`).get();
     const access = snapshot.val();
+    if (access?.mode === 'group') {
+        const group = (await getDatabase().ref(`groupDomains/${access.groupId}`).get()).val();
+        const member = group?.access?.members?.[actor.uid];
+        const effective = member?.status === 'active' && member?.accountStatus === 'active';
+        if (!effective) throw new HttpsError('permission-denied', 'No sos miembro activo de este grupo.');
+        const playerId = Object.entries(access.claims || {}).find(([, claim]) => claim?.uid === actor.uid)?.[0];
+        return {
+            role: group.access.ownerUid === actor.uid || member.role === 'admin' ? 'admin' : 'participant',
+            playerId: playerId === undefined ? null : Number(playerId),
+            claimedPlayerIds: Object.keys(access.claims || {}).map(Number),
+            groupId: access.groupId
+        };
+    }
     if (!access?.members?.[actor.uid] && actor.platformRole !== 'superAdmin') {
         throw new HttpsError('permission-denied', 'No sos miembro de este torneo.');
     }
@@ -679,6 +846,7 @@ export const updateAdminUser = onCall(async request => {
     } catch (error) {
         throw new HttpsError('invalid-argument', error.message);
     }
+    if (updates.disabled === true) await assertAccountDoesNotOwnGroups(uid);
     const user = await getAuth().updateUser(uid, updates);
     await saveAdminProfile(uid, user);
     await logAdminActivity(auth, 'updateAdmin', uid, { fields: Object.keys(updates) });
@@ -694,6 +862,7 @@ export const deleteAdminUser = onCall(async request => {
     if (!isAdminAccount(user)) {
         throw new HttpsError('permission-denied', 'Sólo se pueden eliminar cuentas de admin.');
     }
+    await assertAccountDoesNotOwnGroups(uid);
     await getAuth().deleteUser(uid);
     await getDatabase().ref(`userProfiles/${uid}`).remove();
     await logAdminActivity(auth, 'deleteAdmin', uid, { email: user.email || '' });
@@ -768,8 +937,12 @@ export const setTournamentAdmin = onCall(async request => {
     const user = await getAuth().getUser(uid);
     if (!isAdminAccount(user)) throw new HttpsError('permission-denied', 'Sólo se pueden asignar cuentas admin.');
     const rootRef = getDatabase().ref();
-    if (!(await rootRef.child(`tournaments/${tournamentId}/public`).get()).exists()) {
+    const tournamentPublic = await rootRef.child(`tournaments/${tournamentId}/public`).get();
+    if (!tournamentPublic.exists()) {
         throw new HttpsError('not-found', 'El torneo no existe.');
+    }
+    if (tournamentPublic.child('metadata/groupId').val()) {
+        throw new HttpsError('permission-denied', 'Los torneos de grupo no admiten admins específicos en v1.');
     }
     let adminUpdated = false;
     const transaction = await rootRef.transaction(root => {
@@ -806,6 +979,17 @@ export const getTournamentAdminViewV2 = onCall(async request => {
         getDatabase().ref(`tournamentAccess/${tournamentId}/members`).get()
     ]);
     if (!tournamentSnapshot.exists()) throw new HttpsError('not-found', 'El torneo no existe.');
+    const groupId = tournamentSnapshot.val()?.groupId;
+    if (groupId) {
+        const group = (await getDatabase().ref(`groupDomains/${groupId}`).get()).val();
+        return {
+            ownerUid: group?.access?.ownerUid || null,
+            admins: Object.fromEntries(Object.entries(group?.access?.members || {})
+                .filter(([, member]) => member?.status === 'active' && member?.accountStatus === 'active' && member?.role === 'admin')
+                .map(([memberUid]) => [memberUid, true])),
+            groupId
+        };
+    }
     const members = accessSnapshot.val() || {};
     return {
         ownerUid: tournamentSnapshot.val()?.ownerUid || null,
@@ -821,12 +1005,32 @@ export const setTournamentDeleted = onCall(async request => {
     try { tournamentId = requireTournamentId(request.data?.tournamentId); } catch (error) { throw new HttpsError('invalid-argument', error.message); }
     const deleted = request.data?.deleted === true;
     const ref = getDatabase().ref(`tournaments/${tournamentId}/public/metadata`);
-    if (!(await ref.get()).exists()) throw new HttpsError('not-found', 'El torneo no existe.');
+    const metadataSnapshot = await ref.get();
+    if (!metadataSnapshot.exists()) throw new HttpsError('not-found', 'El torneo no existe.');
+    const groupId = metadataSnapshot.val()?.groupId;
+    if (groupId) {
+        const groupRef = getDatabase().ref(`groupDomains/${groupId}`);
+        const groupSnapshot = await groupRef.get();
+        if (groupSnapshot.val()?.metadata?.status !== 'active') {
+            throw new HttpsError('failed-precondition', 'El grupo no está activo.');
+        }
+    }
     const transaction = await ref.transaction(current => current
         ? buildTournamentDeletion(current, auth.uid, ServerValue.TIMESTAMP, deleted)
         : current);
     if (!transaction.committed || !transaction.snapshot.exists()) {
         throw new HttpsError('not-found', 'El torneo ya no existe.');
+    }
+    if (groupId) {
+        await getDatabase().ref(`groupDomains/${groupId}/tournamentRefs/${tournamentId}`).transaction(current => current ? {
+            ...current,
+            status: deleted ? 'deleted' : 'active',
+            updatedAt: Date.now()
+        } : current);
+        await getDatabase().ref(`groupTournamentIndex/${groupId}/${tournamentId}`).update({
+            status: deleted ? 'deleted' : 'active',
+            updatedAt: Date.now()
+        });
     }
     await logAdminActivity(auth, deleted ? 'deleteTournament' : 'restoreTournament', tournamentId);
     return { deleted };
@@ -839,6 +1043,9 @@ export const permanentlyDeleteTournament = onCall(async request => {
     const ref = getDatabase().ref(`tournaments/${tournamentId}`);
     const snapshot = await ref.get();
     if (!snapshot.exists()) throw new HttpsError('not-found', 'El torneo ya no existe.');
+    if (snapshot.child('public/metadata/groupId').val()) {
+        throw new HttpsError('failed-precondition', 'Los torneos de grupo sólo admiten borrado recuperable en v1.');
+    }
     if (!snapshot.child('public/metadata/deletedAt').val()) {
         throw new HttpsError('failed-precondition', 'Primero debés borrar el torneo de forma recuperable.');
     }
@@ -864,7 +1071,9 @@ export const listTournamentCatalog = onCall(async request => {
         database.ref('userProfiles').get(),
         database.ref('tournamentAccess').get()
     ]);
-    const tournaments = buildTournamentCatalogPayload(snapshot.val(), {
+    const independentTournaments = Object.fromEntries(Object.entries(snapshot.val() || {})
+        .filter(([, tournament]) => !tournament?.public?.metadata?.groupId));
+    const tournaments = buildTournamentCatalogPayload(independentTournaments, {
         uid: authorization.auth.uid,
         role: authorization.role,
         profiles: profilesSnapshot.val() || {},

@@ -94,7 +94,7 @@ export function normalizeCreationRequest(data = {}) {
     };
 }
 
-export function buildTournamentV2({ request, ownerUid, tournamentId, timestamp }) {
+export function buildTournamentV2({ request, ownerUid, tournamentId, timestamp, groupContext = null }) {
     const generated = generateSchedule({
         configuration: request.configuration,
         numRounds: request.numRounds,
@@ -107,6 +107,8 @@ export function buildTournamentV2({ request, ownerUid, tournamentId, timestamp }
         metadata: {
             ...request.metadata,
             ownerUid,
+            createdByUid: ownerUid,
+            groupId: groupContext?.groupId || null,
             createdAt: timestamp,
             updatedAt: timestamp
         },
@@ -119,7 +121,8 @@ export function buildTournamentV2({ request, ownerUid, tournamentId, timestamp }
             scheduleRevision: 0,
             scheduleFingerprint: generated.scheduleFingerprint,
             revision: 0,
-            diagnostic: generated.diagnostic
+            diagnostic: generated.diagnostic,
+            participantRefs: groupContext?.participantRefs || null
         },
         activity: {
             [request.creationRequestId]: {
@@ -136,10 +139,12 @@ export function buildTournamentV2({ request, ownerUid, tournamentId, timestamp }
             _server: { operationReceipts: {} }
         },
         access: {
+            mode: groupContext ? 'group' : 'independent',
+            groupId: groupContext?.groupId || null,
             members: {
                 [ownerUid]: { role: 'admin', joinedAt: timestamp }
             },
-            claims: {},
+            claims: groupContext?.claims || {},
             invitationHashes: {},
             accessRevision: 0,
             accessActivity: {},
@@ -188,12 +193,16 @@ export function validateTournamentV2(publicDocument) {
 }
 
 function actorCanManage(publicDocument, access, actor) {
+    if (publicDocument.metadata.groupId) return access?.groupAuthorization?.canManage === true;
     return actor.platformRole === 'superAdmin'
         || publicDocument.metadata.ownerUid === actor.uid
         || access?.members?.[actor.uid]?.role === 'admin';
 }
 
 function actorPlayerIds(access, actor) {
+    if (Array.isArray(access?.groupAuthorization?.localPlayerIds)) {
+        return access.groupAuthorization.localPlayerIds;
+    }
     return Object.entries(access?.claims || {})
         .filter(([, claim]) => claim?.uid === actor.uid)
         .map(([playerId]) => Number(playerId));
@@ -353,7 +362,8 @@ function applyMutationBody(publicDocument, access, request, actor, preparedFixtu
     case 'changeRoundCount': {
         if (!canManage) throw domainError('FORBIDDEN', 'No podés cambiar las rondas.');
         const targetCount = request.payload.targetCount;
-        if (!Number.isInteger(targetCount) || targetCount < 1 || targetCount > 100) {
+        const maxRounds = publicDocument.metadata.groupId ? 40 : 100;
+        if (!Number.isInteger(targetCount) || targetCount < 1 || targetCount > maxRounds) {
             throw domainError('INVALID_STATE', 'La cantidad de rondas no es válida.');
         }
         if (targetCount < state.numRounds) {

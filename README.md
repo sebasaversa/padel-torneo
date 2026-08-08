@@ -154,6 +154,8 @@ El primer despliegue v2 requiere el procedimiento manual de backup, limpieza de 
 | `v1-fijo-9-jugadores` | Versión original fija para 9 jugadores. |
 | `v1.0` a `v4.0` | Hitos previos del desarrollo funcional. |
 | `v5.0` | Primera versión modular estable basada en Vite. |
+| `v6.0` | Autenticación y roles de plataforma. |
+| `v7.0` | Grupos v1, membresías, invitaciones, torneos e indicadores grupales. |
 
 Para inspeccionar una versión anterior:
 
